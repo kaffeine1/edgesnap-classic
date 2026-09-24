@@ -51,8 +51,14 @@ struct IntuitionIFace *IIntuition;
 struct Library *EdgeSnapBase;
 #define ES_CALL(fn) fn
 struct IntuitionBase *IntuitionBase;
-#else
+#elif defined(__MORPHOS__)
 #include <ppcinline/edgesnap.h>
+struct Library *EdgeSnapBase;
+#define ES_CALL(fn) fn
+struct IntuitionBase *IntuitionBase;
+#else
+/* The classic systems, 68k: the stubs sfdc made from the .fd. */
+#include <inline/edgesnap.h>
 struct Library *EdgeSnapBase;
 #define ES_CALL(fn) fn
 struct IntuitionBase *IntuitionBase;
@@ -80,7 +86,7 @@ int main(int argc, char **argv)
     ULONG caps, zone;
     LONG rc;
 
-    IntuitionBase = (void *)OpenLibrary("intuition.library", 36);
+    IntuitionBase = (void *)OpenLibrary((CONST_STRPTR)"intuition.library", 36);
     if (IntuitionBase == NULL) {
         printf("esnaptest: cannot open intuition.library\n");
         return RETURN_FAIL;
@@ -95,7 +101,8 @@ int main(int argc, char **argv)
     }
 #endif
 
-    EdgeSnapBase = OpenLibrary("edgesnap.library", ES_API_VERSION);
+    EdgeSnapBase = OpenLibrary((CONST_STRPTR)"edgesnap.library",
+                               ES_API_VERSION);
     if (EdgeSnapBase == NULL) {
         printf("esnaptest: cannot open edgesnap.library\n");
         return RETURN_FAIL;

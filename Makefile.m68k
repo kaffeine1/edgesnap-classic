@@ -1,9 +1,21 @@
 # Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
 # SPDX-License-Identifier: MIT
 #
-# The classic lane: 68k, AmigaOS 3.1.4 and later. One binary for now,
-# the commodity with the body linked in (ES_STATIC_CORE), which is how
-# the AROS lane began too; the shared library follows.
+# The classic lane: 68k, AmigaOS 3.1 and later. What comes out:
+#
+#   edgesnap.library  the body and the portable core behind the classic
+#                     jump table (library/m68k/edgesnap_library.c);
+#                     links without a C runtime, like the other lanes
+#   EdgeSnap          the commodity, a client of the library
+#   EdgeSnap-static   the same commodity with the body linked in, the
+#                     form the lane began with: runs without the library
+#   EdgeSnapPrefs     the preferences window, on GadTools
+#   esnaptest         the third-party client, for the bench
+#   keysend           the bench's hand: keys and mouse from the guest
+#
+# The client headers (inline/edgesnap.h, proto/edgesnap.h) are made
+# at build time by fd2sfd and sfdc from library/morphos/edgesnap_lib.fd,
+# the ABI, paired with clib/edgesnap_protos.h for the types.
 #
 # libnix (-mcrt=nix20, -noixemul): a small startup and no ixemul.library
 # at run time, which a commodity meant to be always there must not
@@ -14,31 +26,95 @@
 #
 #   PATH=~/amiga-dev/toolchain/bin:$PATH make -f Makefile.m68k
 CC := m68k-amigaos-gcc
+FD2SFD := fd2sfd
+SFDC := sfdc
 M68K_CPU ?= 68000
+OUT := build/m68k
+GEN := $(OUT)/include
+
+COMMON := -std=gnu89 -Wall -Wextra -O2 -m$(M68K_CPU) -fomit-frame-pointer \
+          -Icore -Iinclude -Ilibrary
 # The runtime is named once: with one gcc call for compiling and
 # linking, naming it in LDFLAGS as well links libnix's startup twice.
-CFLAGS ?= -std=gnu89 -Wall -Wextra -O2 -m$(M68K_CPU) -mcrt=nix20 \
-          -fomit-frame-pointer -DES_STATIC_CORE \
-          -Icore -Iinclude -Ilibrary
+CFLAGS ?= $(COMMON) -mcrt=nix20
 LDFLAGS ?=
-TARGET ?= build/m68k/EdgeSnap
-SRC := commodity/edgesnap_cx.c library/edgesnap_body.c \
-       core/zones.c core/panels.c core/engine.c core/registry.c \
-       core/config.c core/gutter.c
+# The library: no startup, no runtime, the resident tag first in the
+# file and the file first on the line (-fno-toplevel-reorder keeps the
+# order). The 68000's long multiply and divide (__mulsi3, __divsi3 and
+# the like) live in libnix's libc.a in this toolchain, not in libgcc:
+# -lc pulls just those members, as nothing else is undefined.
+LIB_CFLAGS ?= $(COMMON) -fno-builtin -fno-toplevel-reorder \
+              -fno-tree-loop-distribute-patterns -nostartfiles -nostdlib
 
-KEYSEND ?= build/m68k/keysend
-PREFS ?= build/m68k/EdgeSnapPrefs
+CORE_SRC := core/zones.c core/panels.c core/engine.c core/registry.c \
+            core/config.c core/gutter.c
+BODY_SRC := library/edgesnap_body.c $(CORE_SRC)
+CX_SRC := commodity/edgesnap_cx.c
+HEADERS := $(wildcard core/*.h include/*.h library/*.h)
+
+LIB := $(OUT)/edgesnap.library
+CX := $(OUT)/EdgeSnap
+CX_STATIC := $(OUT)/EdgeSnap-static
+PREFS := $(OUT)/EdgeSnapPrefs
+ESNAPTEST := $(OUT)/esnaptest
+KEYSEND := $(OUT)/keysend
+
+FD := library/morphos/edgesnap_lib.fd
+CLIB := include/clib/edgesnap_protos.h
+SFD := $(GEN)/edgesnap_lib.sfd
+STUBS := $(GEN)/inline/edgesnap.h $(GEN)/proto/edgesnap.h
+
 PREFS_SRC := prefs/gadtools/edgesnap_prefs.c prefs/prefs_io.c core/config.c \
              core/engine.c core/zones.c core/panels.c
 
-all: $(TARGET) $(KEYSEND) $(PREFS)
+all: $(LIB) $(CX) $(CX_STATIC) $(PREFS) $(ESNAPTEST) $(KEYSEND)
 
-# The preferences window, on GadTools: nothing beyond the OS itself.
-$(PREFS): $(PREFS_SRC) $(wildcard core/*.h include/*.h prefs/*.h)
+# --- the client headers, from the ABI ---------------------------------
+$(SFD): $(FD) $(CLIB)
+	@mkdir -p "$(dir $@)"
+	$(FD2SFD) "$(FD)" "$(CLIB)" -o "$@"
+
+$(GEN)/inline/edgesnap.h: $(SFD)
+	@mkdir -p "$(dir $@)"
+	$(SFDC) --quiet --target=m68k-amigaos --mode=macros -o "$@" "$(SFD)"
+
+$(GEN)/proto/edgesnap.h: $(SFD)
+	@mkdir -p "$(dir $@)"
+	$(SFDC) --quiet --target=m68k-amigaos --mode=proto -o "$@" "$(SFD)"
+
+# --- the library ------------------------------------------------------
+$(LIB): library/m68k/edgesnap_library.c $(BODY_SRC) $(HEADERS)
+	@mkdir -p "$(dir $@)"
+	$(CC) $(LIB_CFLAGS) -o "$@" library/m68k/edgesnap_library.c $(BODY_SRC) -lgcc -lc
+	@ls -l "$@"
+
+# --- the commodity, as a client and with the body linked in -----------
+# One compiler call over every source, like the AmigaOS 4 lane: no
+# per-object rule, so a header change can never leave a stale object.
+# The client still carries the portable core (names, the prefs parser,
+# the zone arithmetic of its preview), like the MorphOS lane's.
+CX_CLIENT_SRC := $(CX_SRC) core/zones.c core/panels.c core/engine.c core/config.c
+$(CX): $(CX_CLIENT_SRC) $(STUBS) $(HEADERS)
+	@mkdir -p "$(dir $@)"
+	$(CC) $(CFLAGS) $(LDFLAGS) -I"$(GEN)" -o "$@" $(CX_CLIENT_SRC)
+	@ls -l "$@"
+
+$(CX_STATIC): $(CX_SRC) $(BODY_SRC) $(HEADERS)
+	@mkdir -p "$(dir $@)"
+	$(CC) $(CFLAGS) $(LDFLAGS) -DES_STATIC_CORE -o "$@" $(CX_SRC) $(BODY_SRC)
+	@ls -l "$@"
+
+# --- the preferences window, on GadTools: nothing beyond the OS -------
+$(PREFS): $(PREFS_SRC) $(HEADERS) $(wildcard prefs/*.h)
 	@mkdir -p "$(dir $@)"
 	$(CC) $(CFLAGS) $(LDFLAGS) -Iprefs -o "$@" $(PREFS_SRC)
 
-# The bench's hand: keys and mouse from inside the guest (tools/keysend.c).
+# --- the third-party client -------------------------------------------
+$(ESNAPTEST): tools/esnaptest.c $(STUBS) $(HEADERS)
+	@mkdir -p "$(dir $@)"
+	$(CC) $(CFLAGS) $(LDFLAGS) -I"$(GEN)" -o "$@" tools/esnaptest.c
+
+# --- the bench's hand (tools/keysend.c) -------------------------------
 # On clib2, not libnix: libnix's ld dies with a segmentation fault on
 # this one file (not on EdgeSnap), under every flag tried on 2026-09-24,
 # and clib2 is the runtime Telegram Amiga ships with anyway.
@@ -47,14 +123,8 @@ $(KEYSEND): tools/keysend.c
 	@mkdir -p "$(dir $@)"
 	$(CC) $(KEYSEND_CFLAGS) -o "$@" tools/keysend.c -lamiga
 
-# One compiler call over every source, like the AmigaOS 4 lane: no
-# per-object rule, so a header change can never leave a stale object.
-$(TARGET): $(SRC) $(wildcard core/*.h include/*.h library/*.h)
-	@mkdir -p "$(dir $@)"
-	$(CC) $(CFLAGS) $(LDFLAGS) -o "$@" $(SRC)
-	@ls -l "$@"
-
 clean:
-	rm -f "$(TARGET)" "$(KEYSEND)" "$(PREFS)"
+	rm -f "$(LIB)" "$(CX)" "$(CX_STATIC)" "$(PREFS)" "$(ESNAPTEST)" "$(KEYSEND)"
+	rm -rf "$(GEN)"
 
 .PHONY: all clean

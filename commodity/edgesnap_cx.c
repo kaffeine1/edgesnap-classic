@@ -200,6 +200,16 @@ struct Library *EdgeSnapBase;
 static struct Library *EdgeSnapBase;
 static struct EdgeSnapIFace *IEdgeSnap;
 #define ES_CALL(fn) IEdgeSnap->fn
+#elif defined(ES_CLASSIC)
+#define ES_LIB_REV (EdgeSnapBase->lib_Revision)
+/*
+ * The classic systems: the inline stubs sfdc makes at build time from
+ * library/morphos/edgesnap_lib.fd and clib/edgesnap_protos.h turn each
+ * call into the documented register ABI over the jump table.
+ */
+#include <inline/edgesnap.h>
+struct Library *EdgeSnapBase;
+#define ES_CALL(fn) fn
 #else
 #define ES_LIB_REV (EdgeSnapBase->lib_Revision)
 #include <ppcinline/edgesnap.h>
@@ -2975,7 +2985,8 @@ static void spike_close_edgesnap(void)
 #else
 static int spike_open_edgesnap(void)
 {
-    EdgeSnapBase = OpenLibrary("edgesnap.library", ES_API_VERSION);
+    EdgeSnapBase = OpenLibrary((CONST_STRPTR)"edgesnap.library",
+                               ES_API_VERSION);
     if (EdgeSnapBase == NULL) {
         spike_fatal("edgesnap.library could not be opened.\n\n"
                     "It belongs in LIBS:. If EdgeSnap was installed and "
