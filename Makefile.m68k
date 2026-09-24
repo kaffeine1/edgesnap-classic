@@ -1,0 +1,52 @@
+# Copyright (c) 2026 Michele Dipace <michele.dipace@kaffeine.net>
+# SPDX-License-Identifier: MIT
+#
+# The classic lane: 68k, AmigaOS 3.1.4 and later. One binary for now,
+# the commodity with the body linked in (ES_STATIC_CORE), which is how
+# the AROS lane began too; the shared library follows.
+#
+# libnix (-mcrt=nix20, -noixemul): a small startup and no ixemul.library
+# at run time, which a commodity meant to be always there must not
+# need. gnu89 rather than c89 because libnix's own headers say
+# `inline`; the code stays C89 and the host tests hold it to that.
+# 68000 by default, so that one binary runs on every machine the OS
+# itself runs on; M68K_CPU=68020 for a faster build where it matters.
+#
+#   PATH=~/amiga-dev/toolchain/bin:$PATH make -f Makefile.m68k
+CC := m68k-amigaos-gcc
+M68K_CPU ?= 68000
+# The runtime is named once: with one gcc call for compiling and
+# linking, naming it in LDFLAGS as well links libnix's startup twice.
+CFLAGS ?= -std=gnu89 -Wall -Wextra -O2 -m$(M68K_CPU) -mcrt=nix20 \
+          -fomit-frame-pointer -DES_STATIC_CORE \
+          -Icore -Iinclude -Ilibrary
+LDFLAGS ?=
+TARGET ?= build/m68k/EdgeSnap
+SRC := commodity/edgesnap_cx.c library/edgesnap_body.c \
+       core/zones.c core/panels.c core/engine.c core/registry.c \
+       core/config.c core/gutter.c
+
+KEYSEND ?= build/m68k/keysend
+
+all: $(TARGET) $(KEYSEND)
+
+# The bench's hand: keys and mouse from inside the guest (tools/keysend.c).
+# On clib2, not libnix: libnix's ld dies with a segmentation fault on
+# this one file (not on EdgeSnap), under every flag tried on 2026-09-24,
+# and clib2 is the runtime Telegram Amiga ships with anyway.
+KEYSEND_CFLAGS ?= -std=gnu89 -Wall -Wextra -O2 -m$(M68K_CPU) -mcrt=clib2 -Iinclude
+$(KEYSEND): tools/keysend.c
+	@mkdir -p "$(dir $@)"
+	$(CC) $(KEYSEND_CFLAGS) -o "$@" tools/keysend.c -lamiga
+
+# One compiler call over every source, like the AmigaOS 4 lane: no
+# per-object rule, so a header change can never leave a stale object.
+$(TARGET): $(SRC) $(wildcard core/*.h include/*.h library/*.h)
+	@mkdir -p "$(dir $@)"
+	$(CC) $(CFLAGS) $(LDFLAGS) -o "$@" $(SRC)
+	@ls -l "$@"
+
+clean:
+	rm -f "$(TARGET)" "$(KEYSEND)"
+
+.PHONY: all clean

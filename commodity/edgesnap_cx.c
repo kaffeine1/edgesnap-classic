@@ -41,6 +41,14 @@
 
 #include <exec/types.h>
 #include <exec/ports.h>
+
+/*
+ * The classic build: 68k, AmigaOS 3.1.4 and later, the body linked in.
+ * Everything that is neither AmigaOS 4 nor MorphOS nor AROS is this.
+ */
+#if !defined(__amigaos4__) && !defined(__MORPHOS__) && !defined(__AROS__)
+#define ES_CLASSIC 1
+#endif
 #include <exec/tasks.h>
 #include <dos/dos.h>       /* RETURN_*, SIGBREAKF_CTRL_C                */
 #include <dos/notify.h>    /* StartNotify: prefs that change while we run */
@@ -175,6 +183,7 @@ static void spike_pf_drop_now(void);    /* from the input handler */
 #include "edgesnap_static.h"
 #define ES_CALL(fn) fn
 #elif defined(__AROS__)
+#define ES_LIB_REV (EdgeSnapBase->lib_Revision)
 /*
  * AROS: the client headers are generated from library/aros/edgesnap.conf
  * by genmodule. The macro flavour is asked for, not the inline one: the
@@ -186,17 +195,21 @@ static void spike_pf_drop_now(void);    /* from the input handler */
 struct Library *EdgeSnapBase;
 #define ES_CALL(fn) fn
 #elif defined(__amigaos4__)
+#define ES_LIB_REV (EdgeSnapBase->lib_Revision)
 #include "interfaces/edgesnap.h"
 static struct Library *EdgeSnapBase;
 static struct EdgeSnapIFace *IEdgeSnap;
 #define ES_CALL(fn) IEdgeSnap->fn
 #else
+#define ES_LIB_REV (EdgeSnapBase->lib_Revision)
 #include <ppcinline/edgesnap.h>
 struct Library *EdgeSnapBase;
 #define ES_CALL(fn) fn
 #endif
 
+#ifndef ES_STATIC_CORE
 static ULONG g_client_id;     /* our registration with the library (2.10) */
+#endif
 
 /* ---------------------------------------------------------------- tuning */
 
@@ -289,7 +302,18 @@ static struct SpikeShared g_shared;
  * CxCustom action. RULES: no Intuition calls, no allocations, no waiting.
  * Bump a counter, Signal() the main task, get out.
  */
+#ifdef ES_CLASSIC
+/*
+ * commodities.library calls a custom action with the message in a0
+ * and the object in a1. On 68k that is where they arrive, and only a
+ * function declared to read them there sees them: `arg __asm("a0")`
+ * is the form this gcc honours (libnix's own REG() macro is the same),
+ * checked in the generated code before trusting it.
+ */
+static void spike_cx_action(CxMsg *msg __asm("a0"), CxObj *obj __asm("a1"))
+#else
 static void spike_cx_action(CxMsg *msg, CxObj *obj)
+#endif
 {
     struct InputEvent *ie;
     struct Task *engine;
@@ -580,7 +604,7 @@ static void spike_config_tooltypes(struct WBStartup *wbs)
     if (wbs == NULL || wbs->sm_NumArgs < 1 || wbs->sm_ArgList == NULL) {
         return;
     }
-    IconBase = OpenLibrary("icon.library", 36);
+    IconBase = OpenLibrary((CONST_STRPTR)"icon.library", 36);
     if (IconBase == NULL) {
         return;
     }
@@ -1490,7 +1514,7 @@ static struct Window *spike_preview_bar(struct Screen *scr, LONG pen,
     struct Window *win;
 
     win = OpenWindowTags(NULL,
-                         WA_CustomScreen, scr,
+                         WA_CustomScreen, (ESTagData)scr,
                          WA_Left, x,
                          WA_Top, y,
                          WA_Width, w,
@@ -1640,10 +1664,11 @@ static void spike_preview_show(struct Screen *dragscr, const ESRect *r)
 #if defined(__amigaos4__)
 #define ES_PTR_SEAM_VERTICAL   POINTERTYPE_EASTWESTRESIZE
 #define ES_PTR_SEAM_HORIZONTAL POINTERTYPE_NORTHSOUTHRESIZE
-#elif defined(__AROS__)
+#elif defined(__AROS__) || defined(ES_CLASSIC)
 /* AROS has no system pointer types to ask for (its pointerclass.h
- * defines none). The strip lighting up under the pointer is the
- * affordance anyway; a double arrow of our own is later work. */
+ * defines none), and the classic 3.x headers name none for resizing
+ * either. The strip lighting up under the pointer is the affordance
+ * anyway; a double arrow of our own is later work. */
 #define ES_PTR_SEAM_NONE 1
 #else
 #define ES_PTR_SEAM_VERTICAL   POINTERTYPE_HORIZONTALRESIZE
@@ -1960,7 +1985,7 @@ static void spike_divider_sync(void)
      * edges that are already there.
      */
     g_divider = OpenWindowTags(NULL,
-                               WA_CustomScreen, scr,
+                               WA_CustomScreen, (ESTagData)scr,
                                WA_Left, (int)d.strip.x,
                                WA_Top, (int)d.strip.y,
                                WA_Width, (int)d.strip.w,
@@ -1994,7 +2019,7 @@ static void spike_divider_sync(void)
                                          IDCMP_MOUSEMOVE |
                                          IDCMP_REFRESHWINDOW,
                                WA_Activate, FALSE,
-                               WA_BackFill, LAYERS_NOBACKFILL,
+                               WA_BackFill, (ESTagData)LAYERS_NOBACKFILL,
                                TAG_DONE);
     UnlockPubScreen(NULL, scr);
     if (g_divider == NULL) {
@@ -2716,7 +2741,7 @@ static void spike_engine_step(void)
 
         seen_dx += dx;
         seen_dy += dy;
-        if ((dx != 0 || dy != 0) && EdgeSnapBase->lib_Revision >= 7) {
+        if ((dx != 0 || dy != 0) && ES_LIB_REV >= 7) {
             ES_CALL(ESnap_FeedMotion)(dx, dy);
         }
     }
@@ -3353,7 +3378,7 @@ static void spike_sel_open(void)
     }
     g_sel.target = target;
     g_sel.serial = 0;
-    if (EdgeSnapBase->lib_Revision >= 6) {
+    if (ES_LIB_REV >= 6) {
         ULONG serial = 0;
 
         if (ES_CALL(ESnap_QueryWindowSerial)(target, &serial) == ES_OK) {
@@ -3388,7 +3413,7 @@ static void spike_sel_open(void)
         y = 0;
     }
     g_selector = OpenWindowTags(NULL,
-                                WA_CustomScreen, scr,
+                                WA_CustomScreen, (ESTagData)scr,
                                 WA_Left, x,
                                 WA_Top, y,
                                 WA_Width, SEL_W,
@@ -3629,15 +3654,15 @@ static void spike_close_libs(void)
 
 static int spike_open_libs(void)
 {
-    IntuitionBase = (void *)OpenLibrary("intuition.library", 36);
-    GfxBase = (void *)OpenLibrary("graphics.library", 36);
+    IntuitionBase = (void *)OpenLibrary((CONST_STRPTR)"intuition.library", 36);
+    GfxBase = (void *)OpenLibrary((CONST_STRPTR)"graphics.library", 36);
 #ifdef ES_PREVIEW_XOR
     CyberGfxBase = OpenLibrary("cybergraphics.library", 41);
     if (CyberGfxBase == NULL) {
         return 0;
     }
 #endif
-    CxBase = OpenLibrary("commodities.library", 37);
+    CxBase = OpenLibrary((CONST_STRPTR)"commodities.library", 37);
     if (IntuitionBase == NULL || GfxBase == NULL || CxBase == NULL) {
         spike_close_libs();
         return 0;
@@ -3815,7 +3840,7 @@ int main(int argc, char **argv)
     /* The centre is a zone the library learned in 2.9. An older one in
      * LIBS: answers BAD_ARGS, and the width cycle taught us that a
      * refusal nobody explains costs an evening. */
-    if (EdgeSnapBase->lib_Revision < 9) {
+    if (ES_LIB_REV < 9) {
         spike_out("edgesnap: the library in LIBS: is older than 2.9, "
                   "so ctrl alt c (centre) will be refused.\n");
     }
