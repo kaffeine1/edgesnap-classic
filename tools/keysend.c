@@ -22,6 +22,8 @@
  *                                          reports it (IECLASS_RAWMOUSE)
  *   keysend TBUTTON DOWN | UP              the same, as a tablet does
  *   keysend WHERE                          print the pointer's position
+ *   keysend MODES                          list the display modes: id,
+ *                                          size, depth, name
  *
  * What the bench taught (2026-09-24): AT, IECLASS_NEWPOINTERPOS with a
  * pixel position on the Workbench screen, puts the pointer exactly
@@ -49,6 +51,8 @@
 #include <proto/commodities.h>
 #include <intuition/intuitionbase.h>
 #include <proto/intuition.h>
+#include <graphics/displayinfo.h>
+#include <proto/graphics.h>
 #include <clib/alib_protos.h>   /* InvertString, FreeIEvents: amiga.lib */
 #include <stdio.h>
 #include <stdlib.h>
@@ -56,6 +60,38 @@
 
 struct Library *CxBase;
 struct IntuitionBase *IntuitionBase;
+struct GfxBase *GfxBase;
+
+static void modes(void)
+{
+    ULONG id = INVALID_ID;
+
+    GfxBase = (struct GfxBase *)OpenLibrary((CONST_STRPTR)"graphics.library", 39);
+    if (GfxBase == NULL) {
+        return;
+    }
+    while ((id = NextDisplayInfo(id)) != INVALID_ID) {
+        struct DimensionInfo di;
+        struct NameInfo ni;
+        DisplayInfoHandle h = FindDisplayInfo(id);
+
+        if (h == NULL) {
+            continue;
+        }
+        if (GetDisplayInfoData(h, (UBYTE *)&di, sizeof(di), DTAG_DIMS, id) <= 0) {
+            continue;
+        }
+        if (GetDisplayInfoData(h, (UBYTE *)&ni, sizeof(ni), DTAG_NAME, id) <= 0) {
+            ni.Name[0] = '\0';
+        }
+        printf("%08lx %4dx%-4d depth %2d  %s\n", (unsigned long)id,
+               (int)(di.Nominal.MaxX - di.Nominal.MinX + 1),
+               (int)(di.Nominal.MaxY - di.Nominal.MinY + 1),
+               (int)di.MaxDepth, (char *)ni.Name);
+    }
+    CloseLibrary((struct Library *)GfxBase);
+    GfxBase = NULL;
+}
 
 static int same(const char *a, const char *b)
 {
@@ -219,6 +255,8 @@ int main(int argc, char **argv)
     } else if (same(argv[1], "MOVE") && argc >= 4) {
         mouse(IECODE_NOBUTTON, (WORD)atoi(argv[2]), (WORD)atoi(argv[3]),
               argc >= 5 && same(argv[4], "HELD"));
+    } else if (same(argv[1], "MODES")) {
+        modes();
     } else if (same(argv[1], "WHERE")) {
         IntuitionBase = (struct IntuitionBase *)
             OpenLibrary((CONST_STRPTR)"intuition.library", 36);
