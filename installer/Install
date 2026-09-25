@@ -12,7 +12,8 @@
 
 (set #welcome
   (cat "EdgeSnap " #app-version "\n"
-       "Window snapping for AmigaOS 4.x, MorphOS and AROS\n"
+       "Window snapping for AmigaOS 3.1 and later, AmigaOS 4.x, "
+       "MorphOS and AROS\n"
        "by Michele Dipace <michele.dipace@kaffeine.net>\n"
        "MIT license\n\n"
        "Drag a window against a screen edge or corner and it fills "
@@ -110,18 +111,22 @@
     (set #update 0))
 
 ; --- which system? MorphOS is the one with MOSSYS:, AROS the one with
-; aros.library -------------------------------------------------------
+; aros.library; of the two AmigaOS the classic one has an exec below
+; version 50 (3.1 is 40, 3.1.4 is 45 and 46, 3.2 is 47; AmigaOS 4
+; starts at 50) -------------------------------------------------------
 (if (exists "MOSSYS:" (noreq))
     (set #detected 1)
     (if (exists "LIBS:aros.library" (noreq))
         (set #detected 2)
-        (set #detected 0)))
+        (if (< (/ (getversion "exec.library" (resident)) 65536) 50)
+            (set #detected 3)
+            (set #detected 0))))
 
 (set #system
   (askchoice
     (prompt #ask-system)
     (help #ask-system-help)
-    (choices "AmigaOS 4.x" "MorphOS" "AROS x86_64")
+    (choices "AmigaOS 4.x" "MorphOS" "AROS x86_64" "AmigaOS 3.1 and later (68k)")
     (default #detected)))
 
 ; Where the commodity lives and how it starts. On AmigaOS 4 and MorphOS
@@ -156,6 +161,26 @@
           (set #startup-line "WBRun SYS:WBStartup/EdgeSnap")
           (set #startup-line "Run >NIL: <NIL: SYS:WBStartup/EdgeSnap"))
     ))
+; The classic systems: SYS:WBStartup with the icon, the drawer every
+; Workbench since 2.0 starts things from, and S:User-Startup untouched.
+(if (= #system 3)
+    (
+      (set #libsrc "m68k/edgesnap.library")
+      (set #cmdsrc "m68k/EdgeSnap")
+      (set #prefssrc "m68k/EdgeSnapPrefs")
+      (set #cmd-dest "SYS:WBStartup")
+      (set #cmd-path "SYS:WBStartup/EdgeSnap")
+      (set #startup-line "Run >NIL: <NIL: SYS:WBStartup/EdgeSnap")
+      (if (< (/ (getversion "exec.library" (resident)) 65536) 37)
+          (abort "EdgeSnap needs AmigaOS 2.04 or later."))
+    ))
+
+; A package carries the builds it carries, which may be fewer than the
+; four systems above. Stop here with a plain word, not at the first
+; copy that finds no file.
+(if (= (exists #libsrc (noreq)) 0)
+    (abort (cat "This package has no build for the system chosen: "
+                #libsrc " is not in it.")))
 
 (complete 20)
 
@@ -192,9 +217,10 @@
   (confirm))
 
 (protect #cmd-path "+rwed")
-; On AROS the icon beside it, as a plain file (see the preferences for
-; why not (infos)): it is what makes Wanderer start it from WBStartup.
-(if (= #system 2)
+; On AROS and on the classic systems the icon beside it, as a plain
+; file (see the preferences for why not (infos)): it is what makes
+; Wanderer, or Workbench, start it from WBStartup.
+(if (or (= #system 2) (= #system 3))
     (if (exists (cat #cmdsrc ".info") (noreq))
         (
           (copyfiles
@@ -221,7 +247,9 @@
 ; PNG icons without complaint (AROS One, 2026-09-05). MorphOS's icon
 ; is a PNG too, and goes the same way: a plain copy keeps it byte for
 ; byte, where icon.library might write it back in a format of its own.
-; Only AmigaOS 4 still takes the (infos) road.
+; The same on the classic systems, whose icon.library 40 would write
+; back a colour icon without its colours. Only AmigaOS 4 still takes
+; the (infos) road.
 (if (not (= #system 0))
     (
       (copyfiles
@@ -255,6 +283,8 @@
 (complete 70)
 
 ; --- start it with the system ---------------------------------------
+; On the classic systems nothing is written: Workbench starts what is
+; in SYS:WBStartup, and S:User-Startup is left as it was.
 (if (= #system 2)
     (startup #app
       (prompt (cat "On AROS EdgeSnap starts from SYS:WBStartup, so no line is "
@@ -262,7 +292,8 @@
                    "place, which also retires the line of an earlier "
                    "installation."))
       (help #startup-help)
-      (command "; EdgeSnap starts from SYS:WBStartup\n"))
+      (command "; EdgeSnap starts from SYS:WBStartup\n")))
+(if (or (= #system 0) (= #system 1))
     (startup #app
       (prompt #startup-prompt)
       (help #startup-help)
@@ -308,7 +339,9 @@
     (help #guide-help)
     (default (if (= (exists "SYS:Documentation" (noreq)) 2)
                  "SYS:Documentation"
-                 "SYS:"))))
+                 (if (= (exists "HELP:" (noreq)) 2)
+                     "HELP:"
+                     "SYS:")))))
 
 ; The icon too, before and after: it comes off the CD with the CD's
 ; own bits, and an icon that cannot be deleted stops the next
@@ -319,9 +352,9 @@
 (if (exists (tackon #guide-dest "EdgeSnap.guide.info") (noreq))
     (protect (tackon #guide-dest "EdgeSnap.guide.info") "+rwed"))
 
-; The manual and its icon; on AROS the icon as a plain file, for the
-; reason given at the preferences above.
-(if (= #system 2)
+; The manual and its icon; on AROS and the classic systems the icon as
+; a plain file, for the reason given at the preferences above.
+(if (or (= #system 2) (= #system 3))
     (
       (copyfiles
         (source "EdgeSnap.guide")
@@ -405,7 +438,9 @@
            #done-mid
            (if (= #system 2)
                "    (started by Wanderer at every boot)\n"
-               "    one line in S:User-Startup\n")
+               (if (= #system 3)
+                   "    (started by Workbench at every boot)\n"
+                   "    one line in S:User-Startup\n"))
            "    " (tackon #guide-dest "EdgeSnap.guide") "\n\n"
            "Nothing else was installed into the drawer you ran this "
            "from, so it can be deleted.\n"

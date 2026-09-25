@@ -195,6 +195,48 @@ def drawer(src, dst):
           (os.path.relpath(dst, ROOT), len(out)))
 
 
+def classic(src, dst):
+    """The AmigaOS 4 icon with IMAG copies of its ARGB images after
+    them, for the classic systems: icon.library 44 and later (OS 3.5,
+    3.9, 3.1.4, 3.2) know FACE and IMAG and not ARGB, and older ones
+    show the planar image in front of the form, which is Carlo's too.
+    Same chunk order as the drawer, for the reason given there."""
+    blob = bytearray(open(src, "rb").read())
+    at = blob.find(b"FORM")
+    head, form = blob[:at], blob[at:]
+    size = struct.unpack(">I", form[4:8])[0]
+    pos, end = 12, 8 + size
+    face, argbs, others = None, [], []
+    while pos + 8 <= end:
+        cid = bytes(form[pos:pos + 4])
+        ln = struct.unpack(">I", form[pos + 4:pos + 8])[0]
+        body = bytes(form[pos + 8:pos + 8 + ln])
+        if cid == b"FACE":
+            face = bytearray(body)
+        elif cid == b"ARGB":
+            argbs.append(body)
+        elif cid != b"IMAG":
+            others.append((cid, body))
+        pos += 8 + ln + (ln & 1)
+    w, h = face[0] + 1, face[1] + 1
+    face[4:6] = struct.pack(">H", 256 * 3 - 1)       # the IMAG palettes
+
+    def piece(cid, body):
+        return cid + struct.pack(">I", len(body)) + body + (b"\0" if len(body) & 1 else b"")
+
+    inner = b"ICON" + piece(b"FACE", bytes(face))
+    for body in argbs:
+        inner += piece(b"ARGB", body)
+    for body in argbs:
+        inner += piece(b"IMAG", imag(zlib.decompress(body[10:]), (w, h)))
+    for cid, body in others:
+        inner += piece(cid, body)
+    out = bytes(head) + b"FORM" + struct.pack(">I", len(inner)) + inner
+    open(dst, "wb").write(out)
+    print("%-28s %5d bytes, classic, ARGB and IMAG" %
+          (os.path.relpath(dst, ROOT), len(out)))
+
+
 def main():
     for system in ("os4", "mos"):
         os.makedirs(os.path.join(ROOT, "assets", system), exist_ok=True)
@@ -208,6 +250,14 @@ def main():
         os.path.join(ROOT, "assets/mos/EdgeSnapPrefs.info"), "prefs")
     drawer(os.path.join(ROOT, "assets/os4/src/EdgeSnapDrawer.info"),
            os.path.join(ROOT, "assets/EdgeSnapDrawer.info"))
+    # The classic systems take the AmigaOS 4 icons with IMAG copies
+    # inside, made from the finished OS4 ones so the tooltypes and the
+    # stack are the same.
+    os.makedirs(os.path.join(ROOT, "assets", "m68k"), exist_ok=True)
+    classic(os.path.join(ROOT, "assets/os4/EdgeSnap.info"),
+            os.path.join(ROOT, "assets/m68k/EdgeSnap.info"))
+    classic(os.path.join(ROOT, "assets/os4/EdgeSnapPrefs.info"),
+            os.path.join(ROOT, "assets/m68k/EdgeSnapPrefs.info"))
 
 
 if __name__ == "__main__":

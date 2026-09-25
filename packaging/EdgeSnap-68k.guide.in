@@ -1,0 +1,243 @@
+@database EdgeSnap
+@$VER: EdgeSnap.guide 0.1 (29.8.2026)
+@author "Michele Dipace <michele.dipace@kaffeine.net>"
+@(c) "Copyright (c) 2026 Michele Dipace - MIT licence"
+@wordwrap
+
+@node MAIN "EdgeSnap 0.4 beta"
+@{b}EdgeSnap 0.4 beta@{ub}
+Window snapping for AmigaOS 3.1 and later, on the 68k
+by Michele Dipace <michele.dipace@kaffeine.net>
+
+  @{" What it does        " link ABOUT}
+  @{" Installing it       " link INSTALL}
+  @{" Using it            " link USING}
+  @{" Settings            " link SETTINGS}
+  @{" From the Shell      " link SHELL}
+  @{" For programmers     " link LIBRARY}
+  @{" Licence and author  " link AUTHOR}
+
+@endnode
+
+@node ABOUT "What it does"
+@{b}What it does@{ub}
+
+Drag a window by its title bar until the @{b}pointer@{ub} touches a
+screen edge or a corner. A frame shows where the window will land;
+let go and it fills that half or that quarter of the screen - the
+behaviour Windows and macOS users take for granted, on systems that
+never had it.
+
+Two things it is careful about:
+
+@{b}Docks are never covered.@{ub} A dock or panel along an edge is
+detected and the space it occupies is left alone, with a little
+breathing room, so a snapped window sits beside it rather than on
+top of it. This works with docks that float away from the edge too.
+
+@{b}Windows share their edge.@{ub} When two windows end up side by
+side, the seam between them can be dragged: the pointer becomes a
+double arrow and both windows are resized at once, so half and half
+becomes sixty and forty. Neither window can be squeezed out of
+existence.
+
+It runs as a commodity, so it starts with the system and Exchange
+enables, disables or removes it like any other.
+
+@endnode
+
+@node INSTALL "Installing it"
+@{b}Installing it@{ub}
+
+Double-click the @{b}Install@{ub} icon. That is all: the installer
+recognises the system it is running on, proposes the matching build,
+and asks before doing anything.
+
+What it puts where:
+
+  @{b}LIBS:edgesnap.library@{ub}    everything EdgeSnap knows how to do
+  @{b}SYS:WBStartup/EdgeSnap@{ub}   the commodity you interact with, with
+                            its icon, so Workbench starts it at every boot
+  @{b}ENVARC:EdgeSnap.prefs@{ub}    the settings, commented, changing nothing
+  @{b}SYS:Prefs/EdgeSnap@{ub}       the settings window
+  the manual, where you say
+
+Nothing is written to S:User-Startup: the commodity starts from
+SYS:WBStartup like any other, and the icon's tooltypes are read as
+Workbench starts it. It needs AmigaOS 2.04 or later; it was tested on
+3.2, and it should run on any 68000 or later, with or without a
+graphics card.
+
+@{b}Updating@{ub} is installing again. The running copy is stopped,
+the old library is let go of, and the new one takes over - no reboot,
+and nothing for you to type. Your settings are left alone: the
+commented template is only offered when ENVARC:EdgeSnap.prefs does not
+exist yet, and a file already there is never touched.
+
+To remove it: delete the library, the two files in SYS:WBStartup
+and the two in SYS:Prefs.
+
+@endnode
+
+@node USING "Using it"
+@{b}Using it@{ub}
+
+@{b}Snapping@{ub}
+Drag a window's title bar until the pointer touches an edge or a
+corner, then release. The zones are: left and right edges for halves,
+the four corners for quarters, the top edge to maximise.
+
+If a window is already snapped to one side, snapping another to the
+other side gives it the space that is actually left, not a rigid
+half - so a sixty/forty split stays sixty/forty.
+
+@{b}Windows that may not leave the screen@{ub}
+On AmigaOS 3.1.4 and 3.2 the IControl preferences decide whether a
+window may be dragged past the edge of the screen. A window that
+stops at the edge keeps the pointer where it grabbed the title bar:
+the pointer never touches the edge, so nothing snaps. If that is what
+you see, open @{b}SYS:Prefs/IControl@{ub} and allow windows to move
+off-screen, or drag the window by a point near its edge.
+
+@{b}The seam@{ub}
+Where two snapped windows meet there is nothing to see until the
+pointer comes near: then the join lights up in the same colour as the
+preview frame. Press on it and drag, and both windows are resized
+together, following the pointer as you drag. Dragging far towards one
+side stops where a window would
+become smaller than it allows - that is a limit, not a fault. Three or
+four windows that share one line share one seam.
+
+@{b}Hotkeys@{ub}
+  @{b}ctrl alt cursor left@{ub}    snap the active window left
+  @{b}ctrl alt cursor right@{ub}   snap it right
+      Press the same one again and the window takes two thirds of the
+      screen, again and it takes one third, again and it is back to a
+      half. Turn that off with @{b}CYCLESIZES@{ub} if you would rather
+      have halves only.
+  @{b}ctrl alt cursor up@{ub}      maximise it
+  @{b}ctrl alt cursor down@{ub}    put it back where it was
+  @{b}ctrl alt c@{ub}              put it in the middle, at the size it has
+      Nothing about the middle says how big a window should be, so it
+      keeps its own size; one larger than the screen area is cut down
+      to it. @{b}ctrl alt cursor down@{ub} puts it back as usual.
+  @{b}ctrl alt space@{ub}          open the selector under the pointer
+      A small palette that is the map of the screen: nine cells, each
+      where the window would go, with a miniature of its zone. Point
+      and click, or move with the cursor keys and press Return; the
+      middle cell is the centre and the bottom middle puts the window
+      back. Esc, the right button, the hotkey again or a click anywhere
+      else closes it. It acts on the window that was active when it
+      opened.
+  @{b}ctrl alt d@{ub}              print a window dump, to diagnose dock detection
+
+@{b}Changing the settings@{ub}
+Open @{b}SYS:Prefs/EdgeSnap@{ub} - the installer puts it there, with
+the rest of the system's preferences. Change what you like and press
+Save; EdgeSnap follows immediately, without being restarted. Use
+applies the change for this session only, Cancel changes nothing.
+
+The window offers every setting listed under
+@{" Settings " link SETTINGS}, each with the range it accepts, so
+nothing you can choose there can be refused.
+
+@{b}Getting past the zones@{ub}
+If you want to drag a window right up to the edge without it
+snapping, set @{b}BYPASSQUAL@{ub} (see @{" Settings " link SETTINGS})
+and hold that key while you drag.
+
+@endnode
+
+%%SETTINGS%%
+
+@node SHELL "From the Shell"
+@{b}From the Shell@{ub}
+
+  @{b}EdgeSnap@{ub}
+      Start it. Settings come from ENV: or ENVARC:, and anything you
+      add on the command line wins over the file.
+
+  @{b}EdgeSnap ZONES=halves EDGEPX=24@{ub}
+      Start it with those settings for this run.
+
+  @{b}EdgeSnap QUIT@{ub}
+      Stop the copy that is running, and start nothing. This is what
+      the installer uses to replace a running EdgeSnap without a
+      reboot. Starting EdgeSnap a second time by accident is simply
+      refused; only QUIT stops it.
+
+Run from a Shell rather than from SYS:WBStartup and it prints what
+it decides, drag by drag - useful when something does not behave as
+expected. Stop the copy Workbench started first, with
+@{b}EdgeSnap QUIT@{ub} or from Exchange.
+
+Settings are re-read while it runs: whatever writes
+@{b}ENV:EdgeSnap.prefs@{ub} - the preferences window, an editor, a
+script - is noticed at once.
+
+@endnode
+
+@node LIBRARY "For programmers"
+@{b}For programmers@{ub}
+
+@{b}Two version numbers, and why@{ub}
+EdgeSnap is 0.1: a first public release, complete in what it does but
+proven on only two machines. @{b}edgesnap.library@{ub} says 2.2, and
+that is not a mistake - a library's version is its interface, not its
+product. It reached 2 when the seam was added to the API, and the
+revision climbs with every build meant to replace an earlier one,
+because that is how the installer decides whether to replace it.
+
+While EdgeSnap is below 1.0, treat the library's interface as @{b}not
+frozen@{ub}: methods will only ever be added at the end, never moved
+or removed, but names and arguments may still change if a better shape
+turns up. If you build on it now, say which version you built against.
+
+The behaviour lives in @{b}edgesnap.library@{ub}, not in the
+commodity. The commodity is a client like any other: it contributes
+raw input and draws the preview frame, and every decision - drag
+detection, zones, snapping, restoring, the seam - happens inside the
+library.
+
+That means another program can ask for the same things:
+
+  ESnap_SnapWindow(window, zone)    place a window in a zone
+  ESnap_UnsnapWindow(window)        put it back where it was
+  ESnap_QueryZone(...)              ask what a zone's rectangle is
+  ESnap_QueryDivider(...)           find the seam between two windows
+  ESnap_MoveDivider(position)       move it, resizing both
+
+The library validates every window handle on every call, so a window
+that has been closed gives an error rather than a crash.
+
+@{b}esnaptest@{ub}, in the os4 and mos drawers of this package, is a
+small client that opens the library and drives the whole API - a
+worked example.
+
+@endnode
+
+@node AUTHOR "Licence and author"
+@{b}Licence and author@{ub}
+
+EdgeSnap was written by @{b}Michele Dipace@{ub}
+<michele.dipace@kaffeine.net>.
+
+The icons are by @{b}Carlo Spadoni@{ub}, who drew them for EdgeSnap
+and let me ship them with it.
+
+It is distributed under the MIT licence: you may use, copy, change
+and redistribute it, including in commercial work, as long as the
+copyright notice and the licence text travel with it. It comes with
+no warranty.
+
+@{b}Source, and where to report what you find@{ub}
+This is a first public release and it has run on two machines. If
+EdgeSnap covers your dock, misses your seam, or draws something odd
+with window transparency on, that is exactly the report worth having:
+
+  https://github.com/kaffeine1/edgesnap/issues
+
+The same place holds the source, the design notes and what was learned
+the hard way on each system.
+
+@endnode

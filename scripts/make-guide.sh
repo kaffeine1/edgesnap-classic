@@ -9,6 +9,8 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 OUT="${1:-$ROOT/build/pkg/EdgeSnap.guide}"
+# A second template, for a package whose systems differ.
+TEMPLATE="${2:-$ROOT/packaging/EdgeSnap.guide.in}"
 GEN="$ROOT/build/host/settings_guide"
 
 mkdir -p "$(dirname "$OUT")" "$ROOT/build/host"
@@ -20,6 +22,6 @@ cc -std=c89 -pedantic -Wall -Wextra -I"$ROOT/core" -I"$ROOT/include" \
 awk -v gen="$GEN" '
     /^%%SETTINGS%%$/ { while ((gen | getline line) > 0) print line; next }
     { print }
-' "$ROOT/packaging/EdgeSnap.guide.in" > "$OUT"
+' "$TEMPLATE" > "$OUT"
 
 echo "$OUT"
