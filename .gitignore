@@ -4,3 +4,7 @@ build/
 
 # private diaries, never in git (the public checkout keeps this rule in .git/info/exclude)
 *.local.md
+
+# The driver of the machine on the desk: local only, it names the
+# house network and the way in.
+tools/vamp.py
