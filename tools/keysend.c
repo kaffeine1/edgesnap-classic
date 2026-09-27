@@ -38,7 +38,9 @@
  *                                          not take the focus, ask to move
  *                                          it past the right edge of the
  *                                          default public screen, and say
- *                                          whether Intuition let it go
+ *                                          whether Intuition let it go:
+ *                                          whether IControl's "Can Move
+ *                                          Off-screen" is in effect
  *
  * What the bench taught. AT, IECLASS_NEWPOINTERPOS with a pixel
  * position on the Workbench screen, puts the pointer exactly there
@@ -55,10 +57,17 @@
  * Also learnt on 2026-09-27: on AmigaOS 3.2.3 as installed a window
  * dragged against the edge stops there and keeps the pointer where it
  * was grabbed, so the pointer never reaches the edge; IControl's "Can
- * Move Off-screen" lets both go on. MoveWindow() stops at the edge
- * with that setting on or off, so OFFSCREEN cannot tell the two apart:
- * only a drag can. A screen blanker's screen in front takes the
- * injected pointer events and is not woken by them; a key is.
+ * Move Off-screen" lets both go on. MoveWindow() obeys the same
+ * setting, so OFFSCREEN tells whether it is in effect without a drag:
+ * stopped at the edge on the bench as installed, past it on a machine
+ * with the box ticked. A first reading on the bench said "stopped" with
+ * the box ticked too, but IPrefs had not applied it: the whole file,
+ * copied from another machine, differed in settings that need the
+ * Workbench screen reset, and Intuition was waiting on its requester
+ * for the windows to close. Change IControl on a machine in use only
+ * through its editor, and never on someone else's from afar.
+ * A screen blanker's screen in front takes the injected pointer events
+ * and is not woken by them; a key is.
  *
  * Every event goes down the same input pipeline the commodity listens
  * on, so what it sees is what it would see from a keyboard.
