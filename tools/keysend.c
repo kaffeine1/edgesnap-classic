@@ -24,21 +24,41 @@
  *   keysend WHERE                          print the pointer's position
  *   keysend MODES                          list the display modes: id,
  *                                          size, depth, name
+ *   keysend SCREENS                        list the screens, which one is
+ *                                          Workbench's, and the public
+ *                                          ones with the default named
+ *   keysend IDRAG x0 y0 x1 y1 [steps] [ADD]
+ *                                          a drag written into input.device
+ *                                          itself (IND_WRITEEVENT, or with
+ *                                          ADD the V47 IND_ADDEVENT), so
+ *                                          that its own idea of the button
+ *                                          follows; prints what
+ *                                          PeekQualifier() says meanwhile
+ *   keysend OFFSCREEN                      open a small window that does
+ *                                          not take the focus, ask to move
+ *                                          it past the right edge of the
+ *                                          default public screen, and say
+ *                                          whether Intuition let it go
  *
- * What the bench taught (2026-09-24): AT, IECLASS_NEWPOINTERPOS with a
- * pixel position on the Workbench screen, puts the pointer exactly
- * there, as WinUAE's mouse hack does; but a window drag follows only
- * IECLASS_RAWMOUSE events, which Intuition takes as RELATIVE steps
- * with the Y in input units, twice the pixels of a non-interlaced
- * screen, and only without IEQUALIFIER_RELATIVEMOUSE set (with it
- * they moved nothing). DRAG puts that together: AT for the start, raw
- * steps with the button qualifier held, raw button events with no
- * movement of their own.
+ * What the bench taught. AT, IECLASS_NEWPOINTERPOS with a pixel
+ * position on the Workbench screen, puts the pointer exactly there
+ * (2026-09-24). A window drag whose events go through AddIEvents()
+ * moves the window by its first step only, whatever the qualifiers,
+ * relative or absolute (2026-09-24); why is not known. Written to
+ * input.device itself, IDRAG, the same press and pixel positions drag
+ * a window all the way, on WinUAE and on real hardware, and the
+ * commodity follows the drag to a snap (2026-09-27). With IND_ADDEVENT
+ * (V47) input.device also records the button as held, PeekQualifier()
+ * says 4000; with IND_WRITEEVENT it does not, and the drag works just
+ * the same.
  *
- * HELD matters: Intuition drags a window only when the movement events
- * say the button is down (IEQUALIFIER_LEFTBUTTON), as input.device
- * says it on every event while a real button is held. Without it the
- * pointer moves and the window stays (2026-09-24).
+ * Also learnt on 2026-09-27: on AmigaOS 3.2.3 as installed a window
+ * dragged against the edge stops there and keeps the pointer where it
+ * was grabbed, so the pointer never reaches the edge; IControl's "Can
+ * Move Off-screen" lets both go on. MoveWindow() stops at the edge
+ * with that setting on or off, so OFFSCREEN cannot tell the two apart:
+ * only a drag can. A screen blanker's screen in front takes the
+ * injected pointer events and is not woken by them; a key is.
  *
  * Every event goes down the same input pipeline the commodity listens
  * on, so what it sees is what it would see from a keyboard.
@@ -52,6 +72,10 @@
 #include <intuition/intuitionbase.h>
 #include <proto/intuition.h>
 #include <graphics/displayinfo.h>
+#include <intuition/screens.h>
+#include <devices/input.h>
+#include <exec/io.h>
+#include <proto/input.h>
 #include <proto/graphics.h>
 #include <clib/alib_protos.h>   /* InvertString, FreeIEvents: amiga.lib */
 #include <stdio.h>
@@ -61,6 +85,7 @@
 struct Library *CxBase;
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
+struct Device *InputBase;
 
 static void modes(void)
 {
@@ -212,6 +237,251 @@ static void raw(WORD x, WORD y, UWORD code, int held)
     Delay(5);
 }
 
+/*
+ * A drag through input.device rather than past it. AddIEvents() puts
+ * the events into the stream after input.device, whose own record of
+ * the buttons stays "up"; the timer events it sends ten times a second
+ * carry that record, and Intuition, seeing the button up, ends a window
+ * drag after its first step (2026-09-24 and 27). Written to the device,
+ * the press may change the record, and the drag last.
+ */
+static void idrag(int x0, int y0, int x1, int y1, int steps, int add)
+{
+    static struct InputEvent ev;
+    static struct IEPointerPixel pp;
+    struct MsgPort *port;
+    struct IOStdReq *io;
+    struct Screen *scr;
+    int i;
+
+    IntuitionBase = (struct IntuitionBase *)
+        OpenLibrary((CONST_STRPTR)"intuition.library", 39);
+    if (IntuitionBase == NULL) {
+        return;
+    }
+    port = CreateMsgPort();
+    io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(*io)) : NULL;
+    if (io == NULL || OpenDevice((CONST_STRPTR)"input.device", 0,
+                                 (struct IORequest *)io, 0) != 0) {
+        printf("idrag: input.device would not open\n");
+        if (io != NULL) {
+            DeleteIORequest((struct IORequest *)io);
+        }
+        if (port != NULL) {
+            DeleteMsgPort(port);
+        }
+        CloseLibrary((struct Library *)IntuitionBase);
+        IntuitionBase = NULL;
+        return;
+    }
+    InputBase = io->io_Device;
+    if (add && InputBase->dd_Library.lib_Version < 47) {
+        printf("idrag: input.device %d has no IND_ADDEVENT, writing instead\n",
+               (int)InputBase->dd_Library.lib_Version);
+        add = 0;
+    }
+    scr = LockPubScreen(NULL);
+    if (steps < 1) {
+        steps = 1;
+    }
+    printf("idrag: %s, qualifier before %04x\n",
+           add ? "IND_ADDEVENT" : "IND_WRITEEVENT", (unsigned)PeekQualifier());
+
+#define KS_SEND() do { \
+        io->io_Command = add ? IND_ADDEVENT : IND_WRITEEVENT; \
+        io->io_Data = (APTR)&ev; \
+        io->io_Length = sizeof(ev); \
+        io->io_Flags = 0; \
+        DoIO((struct IORequest *)io); \
+    } while (0)
+
+    /* where the drag starts */
+    memset(&ev, 0, sizeof(ev));
+    pp.iepp_Screen = scr;
+    pp.iepp_Position.X = (WORD)x0;
+    pp.iepp_Position.Y = (WORD)y0;
+    ev.ie_Class = IECLASS_NEWPOINTERPOS;
+    ev.ie_SubClass = IESUBCLASS_PIXEL;
+    ev.ie_Code = IECODE_NOBUTTON;
+    ev.ie_EventAddress = &pp;
+    KS_SEND();
+    Delay(10);
+
+    /* the press, as the mouse reports it */
+    memset(&ev, 0, sizeof(ev));
+    ev.ie_Class = IECLASS_RAWMOUSE;
+    ev.ie_Code = IECODE_LBUTTON;
+    ev.ie_Qualifier = IEQUALIFIER_LEFTBUTTON | IEQUALIFIER_RELATIVEMOUSE;
+    KS_SEND();
+    Delay(10);
+    printf("idrag: qualifier after the press %04x\n", (unsigned)PeekQualifier());
+
+    /* the way, a pixel position at a time, the button held */
+    for (i = 1; i <= steps; i++) {
+        memset(&ev, 0, sizeof(ev));
+        pp.iepp_Screen = scr;
+        pp.iepp_Position.X = (WORD)(x0 + (x1 - x0) * i / steps);
+        pp.iepp_Position.Y = (WORD)(y0 + (y1 - y0) * i / steps);
+        ev.ie_Class = IECLASS_NEWPOINTERPOS;
+        ev.ie_SubClass = IESUBCLASS_PIXEL;
+        ev.ie_Code = IECODE_NOBUTTON;
+        ev.ie_Qualifier = IEQUALIFIER_LEFTBUTTON;
+        ev.ie_EventAddress = &pp;
+        KS_SEND();
+        Delay(4);
+    }
+    Delay(20);
+    printf("idrag: qualifier before the release %04x, pointer %d %d\n",
+           (unsigned)PeekQualifier(),
+           scr ? (int)scr->MouseX : -1, scr ? (int)scr->MouseY : -1);
+
+    /* the release */
+    memset(&ev, 0, sizeof(ev));
+    ev.ie_Class = IECLASS_RAWMOUSE;
+    ev.ie_Code = IECODE_LBUTTON | IECODE_UP_PREFIX;
+    ev.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE;
+    KS_SEND();
+    Delay(10);
+    printf("idrag: qualifier after the release %04x\n", (unsigned)PeekQualifier());
+#undef KS_SEND
+
+    if (scr != NULL) {
+        UnlockPubScreen(NULL, scr);
+    }
+    CloseDevice((struct IORequest *)io);
+    DeleteIORequest((struct IORequest *)io);
+    DeleteMsgPort(port);
+    InputBase = NULL;
+    CloseLibrary((struct Library *)IntuitionBase);
+    IntuitionBase = NULL;
+}
+
+/* The screens, copied out under the lock and printed after it: no
+ * output while Intuition is held, since a console needs Intuition. */
+#define KS_MAX_SCREENS 16
+
+struct KsScreen {
+    ULONG addr;
+    WORD w, h;
+    UWORD flags;
+    char title[64];
+};
+
+static void screens(void)
+{
+    static struct KsScreen list[KS_MAX_SCREENS];
+    static struct KsScreen pub[KS_MAX_SCREENS];
+    char def[MAXPUBSCREENNAME + 1];
+    struct Screen *s;
+    struct PubScreenNode *pn;
+    struct List *pl;
+    ULONG lock;
+    int n = 0, np = 0, i;
+
+    IntuitionBase = (struct IntuitionBase *)
+        OpenLibrary((CONST_STRPTR)"intuition.library", 37);
+    if (IntuitionBase == NULL) {
+        return;
+    }
+    def[0] = '\0';
+    GetDefaultPubScreen((UBYTE *)def);
+    lock = LockIBase(0);
+    for (s = IntuitionBase->FirstScreen; s != NULL && n < KS_MAX_SCREENS;
+         s = s->NextScreen) {
+        list[n].addr = (ULONG)s;
+        list[n].w = s->Width;
+        list[n].h = s->Height;
+        list[n].flags = s->Flags;
+        strncpy(list[n].title, s->Title ? (const char *)s->Title : "",
+                sizeof(list[n].title) - 1);
+        list[n].title[sizeof(list[n].title) - 1] = '\0';
+        n++;
+    }
+    UnlockIBase(lock);
+    pl = LockPubScreenList();
+    for (pn = (struct PubScreenNode *)pl->lh_Head;
+         pn->psn_Node.ln_Succ != NULL && np < KS_MAX_SCREENS;
+         pn = (struct PubScreenNode *)pn->psn_Node.ln_Succ) {
+        pub[np].addr = (ULONG)pn->psn_Screen;
+        strncpy(pub[np].title, pn->psn_Node.ln_Name ? pn->psn_Node.ln_Name : "",
+                sizeof(pub[np].title) - 1);
+        pub[np].title[sizeof(pub[np].title) - 1] = '\0';
+        np++;
+    }
+    UnlockPubScreenList();
+
+    printf("default public screen: %s\n", def);
+    for (i = 0; i < n; i++) {
+        printf("screen %08lx %dx%d flags %04x%s \"%s\"\n",
+               (unsigned long)list[i].addr, (int)list[i].w, (int)list[i].h,
+               (unsigned)list[i].flags,
+               (list[i].flags & SCREENTYPE) == WBENCHSCREEN ? " WORKBENCH" : "",
+               list[i].title);
+    }
+    for (i = 0; i < np; i++) {
+        printf("public \"%s\" = %08lx\n", pub[i].title,
+               (unsigned long)pub[i].addr);
+    }
+    CloseLibrary((struct Library *)IntuitionBase);
+    IntuitionBase = NULL;
+}
+
+/*
+ * Can a window go past the edge of the screen? A small window that does
+ * not take the focus opens near the right edge of the default public
+ * screen and is asked to move 80 pixels beyond it. Intuition clamps a
+ * move that the screen does not allow, and says nothing: the answer is
+ * where the window ends up.
+ */
+static void offscreen(void)
+{
+    struct Screen *scr;
+    struct Window *w;
+    int sw, before, after;
+
+    IntuitionBase = (struct IntuitionBase *)
+        OpenLibrary((CONST_STRPTR)"intuition.library", 37);
+    if (IntuitionBase == NULL) {
+        return;
+    }
+    scr = LockPubScreen(NULL);
+    if (scr == NULL) {
+        printf("offscreen: no public screen\n");
+        CloseLibrary((struct Library *)IntuitionBase);
+        return;
+    }
+    sw = scr->Width;
+    w = OpenWindowTags(NULL,
+                       WA_PubScreen, (ULONG)scr,
+                       WA_Left, sw - 200,
+                       WA_Top, scr->Height / 2,
+                       WA_Width, 160,
+                       WA_Height, 60,
+                       WA_Title, (ULONG)"keysend offscreen",
+                       WA_DragBar, TRUE,
+                       WA_Activate, FALSE,
+                       WA_SimpleRefresh, TRUE,
+                       WA_NoCareRefresh, TRUE,
+                       TAG_DONE);
+    UnlockPubScreen(NULL, scr);
+    if (w == NULL) {
+        printf("offscreen: the probe window would not open\n");
+        CloseLibrary((struct Library *)IntuitionBase);
+        return;
+    }
+    before = w->LeftEdge;
+    MoveWindow(w, 120, 0);          /* its right edge 80 px past the screen's */
+    Delay(25);                      /* MoveWindow is carried out by Intuition later */
+    after = w->LeftEdge;
+    printf("offscreen: screen %d wide, window %d wide, left %d -> %d "
+           "(asked %d): %s\n", sw, (int)w->Width, before, after, before + 120,
+           after + w->Width > sw ? "PAST THE EDGE, allowed" :
+                                  "stopped at the edge");
+    CloseWindow(w);
+    CloseLibrary((struct Library *)IntuitionBase);
+    IntuitionBase = NULL;
+}
+
 int main(int argc, char **argv)
 {
     int rc = 0;
@@ -257,6 +527,15 @@ int main(int argc, char **argv)
               argc >= 5 && same(argv[4], "HELD"));
     } else if (same(argv[1], "MODES")) {
         modes();
+    } else if (same(argv[1], "SCREENS")) {
+        screens();
+    } else if (same(argv[1], "OFFSCREEN")) {
+        offscreen();
+    } else if (same(argv[1], "IDRAG") && argc >= 6) {
+        idrag(atoi(argv[2]), atoi(argv[3]), atoi(argv[4]), atoi(argv[5]),
+              argc >= 7 ? atoi(argv[6]) : 12,
+              (argc >= 8 && same(argv[7], "ADD")) ||
+              (argc == 7 && same(argv[6], "ADD")));
     } else if (same(argv[1], "WHERE")) {
         IntuitionBase = (struct IntuitionBase *)
             OpenLibrary((CONST_STRPTR)"intuition.library", 36);
