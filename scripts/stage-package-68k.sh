@@ -98,6 +98,11 @@ the library in LIBS:, the commodity and its icon in SYS:WBStartup, the
 preferences in SYS:Prefs, the manual where you say. Nothing is written
 to S:User-Startup. Updating is installing again: no reboot needed.
 
+The FIRST installation also turns on one setting of AmigaOS, "Can Move
+Off-screen" of the IControl preferences, from the next start of the
+system: without it a dragged window stops at the edge and never snaps.
+The installer says so, and EdgeSnap's preferences turn it back.
+
 The icons are by Carlo Spadoni, who drew them for EdgeSnap.
 
 Full documentation is in EdgeSnap.guide.

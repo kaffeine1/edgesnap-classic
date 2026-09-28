@@ -64,8 +64,10 @@ the four corners for quarters, the top edge to maximise.
 A corner is the corner itself. Anywhere along a side edge gives the
 half, even with the title bar right under the screen's own; for a
 quarter, push the pointer on into the corner, where the screen stops
-it. If you would rather have longer corners, the Corner size setting
-gives them back.
+it. The top edge is the screen's own title bar, for the same reason: a
+window that sits at the top is not maximised the moment it is touched.
+If you would rather have longer corners, and a top edge that reaches
+into the screen, the Corner size setting gives them back.
 """),
 
     # windows that stop at the edge
@@ -80,17 +82,21 @@ limits. AROS has the same switch in its IControl preferences, on by
 default; AmigaOS 4 lets a window leave the screen without asking.
 """,
      """@{b}Windows that may not leave the screen@{ub}
-On AmigaOS 3.2 as installed, a window dragged against the edge of the
-screen stops there, and the pointer stops with it, where it holds the
-title bar: it never reaches the edge. EdgeSnap reads the mouse as well
-as the pointer, so keep pushing: a window pressed against an edge, with
-the mouse still pushing, counts as the pointer being there.
+AmigaOS 3.2 as installed keeps windows on the screen: one dragged
+against an edge stops there, and the pointer stops with it, where it
+holds the title bar. It never reaches the edge, so a drag never snaps;
+the hotkeys and the selector still do.
 
-It feels better with the window free to go on. Open
-@{b}SYS:Prefs/IControl@{ub}, tick @{b}Can Move Off-screen@{ub} under
-Windows and press Save. Intuition then asks to reset the Workbench
-screen and wants every window closed first; Cancel is fine, the setting
-is saved and takes effect at the next start.
+So the first time EdgeSnap is installed, the installer turns on the
+setting of AmigaOS that lets windows move off-screen, and it takes
+effect when the system starts again. It is the box
+@{b}Can Move Off-screen@{ub} in @{b}SYS:Prefs/IControl@{ub}, and
+EdgeSnap's own preferences have it too, as
+@{b}Windows can move off-screen@{ub}: that is where to turn it back.
+
+Changing it makes AmigaOS ask to reset the Workbench screen, naming the
+windows to close first. Close them and press Retry, or press Cancel and
+let it take effect at the next start.
 """),
 
     # the seam
@@ -120,7 +126,7 @@ MorphOS hardware and on AmigaOS 4 and AROS under emulation.
 """,
      """EdgeSnap is 0.4: a beta, complete in what it does and tested on
 AmigaOS 3.2, on real hardware and under emulation.
-@{b}edgesnap.library@{ub} says 2.18, and that is not a mistake: a
+@{b}edgesnap.library@{ub} says 2.19, and that is not a mistake: a
 """),
     ("""@{b}esnaptest@{ub}, in the os4, mos and aros64 drawers of this package,
 is a small client""",

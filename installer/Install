@@ -282,6 +282,25 @@
 
 (complete 70)
 
+; --- windows that can move off-screen (classic, first installation) --
+;
+; AmigaOS 3.2 as installed keeps windows on the screen: one dragged
+; against an edge stops there and holds the pointer back, where it has
+; the title bar, so the pointer never reaches the edge and a drag
+; never snaps. The setting that lets windows go on is AmigaOS's own,
+; "Can Move Off-screen" in its IControl preferences. The first
+; installation turns it on, in the archived preferences only: nothing
+; happens until the system starts again, and no requester about
+; resetting the Workbench screen appears in the middle of installing.
+; An update leaves it alone: whoever turned it back meant it.
+; EdgeSnap's preferences program does the work, and has the box.
+(set #offscreen 0)
+(if (= #system 3)
+    (if (= #update 0)
+        (if (= (run "SYS:Prefs/EdgeSnap >NIL: OFFSCREEN QUERY BOOTONLY" (safe)) 5)
+            (if (= (run "SYS:Prefs/EdgeSnap >NIL: OFFSCREEN ON BOOTONLY") 0)
+                (set #offscreen 1)))))
+
 ; --- start it with the system ---------------------------------------
 ; On the classic systems nothing is written: Workbench starts what is
 ; in SYS:WBStartup, and S:User-Startup is left as it was.
@@ -430,6 +449,21 @@
       (default 1))
     (run #startup-line))
 
+; What was changed outside EdgeSnap is said on a page of its own, to
+; every user level: nobody should find a system setting different and
+; not know who did it, or how to have it back.
+(if (= #offscreen 1)
+    (message
+      (cat "One setting of AmigaOS was changed.\n\n"
+           "Windows can now move off-screen, from the next time the "
+           "system starts. Without that, a window dragged to an edge "
+           "stops there and holds the pointer back, and nothing snaps.\n\n"
+           "Until the system has started again the hotkeys work, "
+           "dragging does not.\n\n"
+           "To have it as it was: SYS:Prefs/EdgeSnap, the box "
+           "\"Windows can move off-screen\".")
+      (all)))
+
 ; (quiet): our own closing text says what happened - the Installer's
 ; standard one would add that EdgeSnap "is in Work:", which is not
 ; where any of it went.
@@ -442,7 +476,9 @@
                    "    (started by Workbench at every boot)\n"
                    "    one line in S:User-Startup\n"))
            "    " (tackon #guide-dest "EdgeSnap.guide") "\n\n"
-           "The drawer you ran this from can be deleted.\n"
+           (if (= #offscreen 1)
+               "Restart the system once before dragging windows.\n"
+               "The drawer you ran this from can be deleted.\n")
            (if (= #old-preview 1)
                (cat "\nThe copy of the first preview in C: was removed. Its "
                     "line in S:User-Startup, Run >NIL: C:EdgeSnap, does "
