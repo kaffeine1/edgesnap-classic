@@ -100,7 +100,13 @@
  *       the height at each end made half of every side edge a corner.
  *       And a window dragged as an outline and pushed against an edge
  *       snaps: the push looks at the outline, not at the window that
- *       stays put until the release.
+ *       stays put until the release. (Withdrawn in 2.19.)
+ *   2.19 - the classic systems only. No push at all there: under a
+ *       real hand the zone came and went and the frame flickered; the
+ *       windows are let off the screen instead, an AmigaOS setting the
+ *       installer and the preferences look after. With corners of no
+ *       length the top edge is the screen's title bar, so a window
+ *       that sits at the top is not in the maximize zone when touched.
  */
 #define ES_API_VERSION       2
 /* A client that uses a vector appended after 2.2 must check that the

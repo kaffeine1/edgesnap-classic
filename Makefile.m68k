@@ -32,8 +32,12 @@ M68K_CPU ?= 68000
 OUT := build/m68k
 GEN := $(OUT)/include
 
+# ES_ENGINE_PUSH_PX=0: no guessing that a pinned pointer is at the
+# edge. Where windows are dragged as an outline, a hand's mouse made
+# the zone come and go under a steady push; here windows are let off
+# the screen instead (the preferences and the installer see to it).
 COMMON := -std=gnu89 -Wall -Wextra -O2 -m$(M68K_CPU) -fomit-frame-pointer \
-          -Icore -Iinclude -Ilibrary
+          -DES_ENGINE_PUSH_PX=0 -Icore -Iinclude -Ilibrary
 # The runtime is named once: with one gcc call for compiling and
 # linking, naming it in LDFLAGS as well links libnix's startup twice.
 CFLAGS ?= $(COMMON) -mcrt=nix20

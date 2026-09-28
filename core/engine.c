@@ -11,6 +11,13 @@
 
 #include "engine.h"
 
+/* The mouse's own travel against an edge that pins the pointer counts
+ * as the pointer being there after this much of it; 0 turns it off,
+ * which the classic lane does (see es_engine_motion). */
+#ifndef ES_ENGINE_PUSH_PX
+#define ES_ENGINE_PUSH_PX 24
+#endif
+
 static int es_abs(int v)
 {
     return v < 0 ? -v : v;
@@ -30,8 +37,13 @@ void es_engine_config_defaults(ESEngineConfig *cfg)
      */
     cfg->corner_div = 0;
     cfg->drag_min_px = 4;
-    cfg->push_px = 24;
+    cfg->push_px = ES_ENGINE_PUSH_PX;
     cfg->zones_mask = ES_ZONEMASK_ALL;
+}
+
+int es_engine_top_px(const ESEngineConfig *cfg)
+{
+    return cfg->corner_div <= 1 ? 0 : cfg->edge_px;
 }
 
 int es_engine_corner_px(const ESEngineConfig *cfg, int usable_h)
@@ -164,25 +176,7 @@ void es_engine_motion(ESEngine *e, const ESWinFacts *facts,
         int my = facts->mouse_y;
         const ESRect *u = &facts->usable;
         const ESRect *b = &facts->box;
-        ESRect outline;
         int z;
-
-        /*
-         * Where the dragged window is. A system that moves windows
-         * solid says so in the box. One that drags an outline (AROS,
-         * AmigaOS 3.x) leaves the box where it was until the release,
-         * and the outline is the box moved by the pointer's travel
-         * since the press: that is the window that meets the edge and
-         * pins the pointer, so that is what the push below looks at
-         * (AmigaOS 3.2.3, 2026-09-28: pushed against the edge, nothing
-         * snapped, because the box never came near it).
-         */
-        if (b->x == e->base_box.x && b->y == e->base_box.y) {
-            outline = *b;
-            outline.x = e->base_box.x + (facts->mouse_x - e->base_mx);
-            outline.y = e->base_box.y + (facts->mouse_y - e->base_my);
-            b = &outline;
-        }
 
         /*
          * A window that may not leave the screen (MorphOS as delivered,
@@ -196,30 +190,44 @@ void es_engine_motion(ESEngine *e, const ESWinFacts *facts,
          * as being ON that edge. A pointer that moves on that axis is
          * free, and the count starts over.
          */
-        if (facts->push_x != 0 && mx == prev_mx) {
-            e->push_acc_x += facts->push_x;
+        /*
+         * push_px 0 turns this off: on a system that drags an outline
+         * the pinned pointer and a hand's mouse reports, which mix
+         * sideways and vertical travel all the time, made the zone come
+         * and go under a steady push, and the frame flicker with it
+         * (AmigaOS 3.2 on real hardware, 2026-09-28). There the answer
+         * is to let the window leave the screen, not to guess.
+         */
+        if (e->cfg.push_px > 0) {
+            if (facts->push_x != 0 && mx == prev_mx) {
+                e->push_acc_x += facts->push_x;
+            } else {
+                e->push_acc_x = 0;
+            }
+            if (facts->push_y != 0 && my == prev_my) {
+                e->push_acc_y += facts->push_y;
+            } else {
+                e->push_acc_y = 0;
+            }
+            if (e->push_acc_x <= -e->cfg.push_px && b->x <= u->x) {
+                mx = u->x;
+            } else if (e->push_acc_x >= e->cfg.push_px &&
+                       b->x + b->w >= u->x + u->w) {
+                mx = u->x + u->w - 1;
+            }
+            if (e->push_acc_y <= -e->cfg.push_px && b->y <= u->y) {
+                my = u->y;
+            } else if (e->push_acc_y >= e->cfg.push_px &&
+                       b->y + b->h >= u->y + u->h) {
+                my = u->y + u->h - 1;
+            }
         } else {
             e->push_acc_x = 0;
-        }
-        if (facts->push_y != 0 && my == prev_my) {
-            e->push_acc_y += facts->push_y;
-        } else {
             e->push_acc_y = 0;
         }
-        if (e->push_acc_x <= -e->cfg.push_px && b->x <= u->x) {
-            mx = u->x;
-        } else if (e->push_acc_x >= e->cfg.push_px &&
-                   b->x + b->w >= u->x + u->w) {
-            mx = u->x + u->w - 1;
-        }
-        if (e->push_acc_y <= -e->cfg.push_px && b->y <= u->y) {
-            my = u->y;
-        } else if (e->push_acc_y >= e->cfg.push_px &&
-                   b->y + b->h >= u->y + u->h) {
-            my = u->y + u->h - 1;
-        }
-        z = es_zone_from_pointer(u, mx, my, e->cfg.edge_px,
-                                 es_engine_corner_px(&e->cfg, u->h));
+        z = es_zone_from_pointer_top(u, mx, my, e->cfg.edge_px,
+                                     es_engine_corner_px(&e->cfg, u->h),
+                                     es_engine_top_px(&e->cfg));
 
         /* Holding the bypass qualifier, or landing in a zone the user
          * switched off, means "just move the window". */

@@ -24,7 +24,7 @@
  * commodity asks a library how new it is. Keep it in step with the
  * lanes' ES_LIB_REVISION and the history in edgesnap_types.h.
  */
-#define ES_STATIC_REVISION 18
+#define ES_STATIC_REVISION 19
 #define ES_LIB_REV ES_STATIC_REVISION
 
 #define ESnap_QueryCapabilities esb_query_capabilities

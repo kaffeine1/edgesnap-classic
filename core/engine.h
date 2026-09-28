@@ -62,6 +62,15 @@ void es_engine_config_defaults(ESEngineConfig *cfg);
  */
 int es_engine_corner_px(const ESEngineConfig *cfg, int usable_h);
 
+/*
+ * How far below the usable area's top the pointer still counts as on
+ * the top edge: the edge distance, or 0 with corners of no length, so
+ * that a window whose title bar sits at the top of the usable area is
+ * not in the maximize zone the moment it is dragged. The top edge is
+ * then the screen's title bar and above.
+ */
+int es_engine_top_px(const ESEngineConfig *cfg);
+
 /* Actions emitted by one input step. Flags say which fields are valid.
  * On release both hide_preview and do_snap can be set: hide first. */
 typedef struct ESEngineActions {

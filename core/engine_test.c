@@ -483,12 +483,46 @@ static void test_pinned_pointer_pushing_at_the_edge(void)
 }
 
 /*
- * The same push where windows are dragged as an outline (AmigaOS 3.x,
- * AROS): the box stays where the drag began, and it is the outline,
- * the box moved by the pointer's travel, that stops at the edge and
- * pins the pointer.
+ * With the settings as they come, a window whose title bar is just
+ * under the screen's bar is not in the maximize zone when it is
+ * dragged: the top edge is the screen's bar. Pushed up into it, it is.
  */
-static void test_pinned_outline_pushing_at_the_edge(void)
+static void test_default_top_is_the_screen_bar(void)
+{
+    ESEngine e;
+    ESWinFacts f;
+    ESEngineActions a;
+    int w1;
+
+    es_engine_init(&e, 0);
+    std_facts(&f, &w1);
+    f.box.y = 12;                    /* the window at the top ... */
+    f.mouse_y = 22;                  /* ... held by its title bar */
+    start_drag(&e, &f);              /* moves it 30 right, 5 down */
+
+    f.mouse_x = 320;
+    f.mouse_y = 18;                  /* six below the usable top: 12 */
+    es_engine_motion(&e, &f, &a);
+    CHECK(a.zone == ES_ZONE_NONE);
+
+    f.mouse_y = 5;                   /* in the screen's bar */
+    es_engine_motion(&e, &f, &a);
+    CHECK(a.zone_changed == 1 && a.zone == ES_ZONE_MAX);
+
+    f.mouse_y = 12;                  /* the usable area's first row */
+    es_engine_motion(&e, &f, &a);
+    CHECK(a.zone == ES_ZONE_MAX);
+
+    f.mouse_y = 13;
+    es_engine_motion(&e, &f, &a);
+    CHECK(a.zone_changed == 1 && a.zone == ES_ZONE_NONE);
+    es_engine_release(&e, &a);
+    CHECK(a.do_snap == 0);
+}
+
+/* push_px 0, as the classic lane builds it: a pinned pointer and a
+ * pushing mouse are just that, no zone. */
+static void test_no_push_when_turned_off(void)
 {
     ESEngine e;
     ESWinFacts f;
@@ -496,39 +530,19 @@ static void test_pinned_outline_pushing_at_the_edge(void)
     int w1, i;
 
     es_engine_init(&e, 0);
-    std_facts(&f, &w1);             /* box 100,100; press at 200,110 */
-    f.bar_h = 20;
-    es_engine_press(&e, -1, -1, &a);
-    es_engine_motion(&e, &f, &a);   /* baseline, on the bar */
-
-    /* the outline meets the left edge: 100 + (100 - 200) = 0, and
-     * Intuition keeps the pointer 100 pixels in, where it grabbed */
-    f.mouse_x = 100;
-    f.mouse_y = 240;
-    es_engine_motion(&e, &f, &a);
-    CHECK(a.drag_started == 1);
-    CHECK(a.zone == ES_ZONE_NONE);
-    for (i = 0; i < 3; i++) {       /* three pushes of 10 px: 30 > 24 */
-        f.push_x = -10;
-        es_engine_motion(&e, &f, &a);
-    }
-    CHECK(a.zone_changed == 1 && a.zone == ES_ZONE_LEFT);
-    es_engine_release(&e, &a);
-    CHECK(a.do_snap == 1 && a.snap_zone == ES_ZONE_LEFT);
-
-    /* an outline still short of the edge is not pushed anywhere */
+    e.cfg.push_px = 0;
     std_facts(&f, &w1);
-    f.bar_h = 20;
-    es_engine_press(&e, -1, -1, &a);
-    es_engine_motion(&e, &f, &a);
-    f.mouse_x = 120;                /* outline at x 20 */
+    start_drag(&e, &f);
+    f.box.x = 0;                    /* flush with the left edge */
+    f.mouse_x = 60;                 /* pinned at the grab point  */
     f.mouse_y = 240;
     es_engine_motion(&e, &f, &a);
-    for (i = 0; i < 5; i++) {
+    for (i = 0; i < 6; i++) {
         f.push_x = -10;
         es_engine_motion(&e, &f, &a);
     }
     CHECK(a.zone == ES_ZONE_NONE);
+    CHECK(e.push_acc_x == 0);
     es_engine_release(&e, &a);
     CHECK(a.do_snap == 0);
 }
@@ -603,8 +617,9 @@ int main(void)
 {
     test_happy_left_snap();
     test_default_corner_is_the_corner();
+    test_default_top_is_the_screen_bar();
+    test_no_push_when_turned_off();
     test_pinned_pointer_pushing_at_the_edge();
-    test_pinned_outline_pushing_at_the_edge();
     test_push_without_a_wall_is_ignored();
     test_click_without_drag();
     test_app_moves_window_alone();

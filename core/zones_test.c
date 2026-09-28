@@ -54,6 +54,24 @@ static void test_zone_from_pointer(void)
  * A title bar just under the screen's own bar is a half, the screen
  * bar itself is the corner.
  */
+/* The top edge with a band of its own: 0 is the screen's bar. */
+static void test_zone_top_band(void)
+{
+    ESRect u;
+    u.x = 0;
+    u.y = 12;
+    u.w = 640;
+    u.h = 468;
+
+    CHECK(es_zone_from_pointer_top(&u, 320, 12, 12, 0, 0) == ES_ZONE_MAX);
+    CHECK(es_zone_from_pointer_top(&u, 320, 3, 12, 0, 0) == ES_ZONE_MAX);
+    CHECK(es_zone_from_pointer_top(&u, 320, 13, 12, 0, 0) == ES_ZONE_NONE);
+    CHECK(es_zone_from_pointer_top(&u, 320, 24, 12, 0, 12) == ES_ZONE_MAX);
+    /* the side edges do not care */
+    CHECK(es_zone_from_pointer_top(&u, 0, 13, 12, 0, 0) == ES_ZONE_LEFT);
+    CHECK(es_zone_from_pointer_top(&u, 0, 12, 12, 0, 0) == ES_ZONE_TOP_LEFT);
+}
+
 static void test_zone_corner_only(void)
 {
     ESRect u;
@@ -295,6 +313,7 @@ int main(void)
     test_stepped_zone_honours_limits();
     test_zone_from_pointer();
     test_zone_corner_only();
+    test_zone_top_band();
     test_zone_rect_tiles();
     test_fit_zone_rect();
 
