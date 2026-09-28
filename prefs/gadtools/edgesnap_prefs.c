@@ -18,6 +18,20 @@
  * from the IDCMP messages as the gadgets change, not read back at the
  * end: GT_GetGadgetAttrs() arrived with V39, and nothing here needs
  * more than V37.
+ *
+ * One row is not EdgeSnap's: "Windows can move off-screen" is
+ * AmigaOS's own setting, the box of the same name in its IControl
+ * editor, kept in its IControl file. It is here because a drag only
+ * snaps where the pointer can reach the edge, and with that setting
+ * off a dragged window stops at the edge and holds the pointer back.
+ * It appears where the setting exists, from intuition.library 47.
+ *
+ * From a Shell, and from the installer:
+ *   EdgeSnapPrefs OFFSCREEN QUERY|ON|OFF [BOOTONLY]
+ * asks or sets that one thing without opening the window; BOOTONLY
+ * leaves the live file alone, so that nothing happens until the
+ * system starts again. QUERY returns 0 for on and 5 for off; every
+ * form returns 10 where the setting does not exist.
  */
 #include <exec/types.h>
 #include <dos/dos.h>
@@ -38,6 +52,7 @@
 
 #include "config.h"
 #include "prefs_io.h"
+#include "icontrol_offscreen.h"
 #include "edgesnap_version.h"
 #include "edgesnap.h"
 
@@ -71,12 +86,13 @@ enum {
     ES_ID_SAVE = 1,
     ES_ID_USE,
     ES_ID_CANCEL,
+    ES_ID_OFFSCREEN,          /* AmigaOS's setting, not ours */
     ES_ID_SETTING = 100,      /* + index into the table  */
     ES_ID_ZONE = 200          /* + index into zone order */
 };
 
 #define ES_PAD     4          /* inside a frame, and around the columns */
-#define ES_GAP     4          /* between two frames                     */
+#define ES_GAP     2          /* between two frames                     */
 #define ES_LGAP    8          /* GadTools' own gap, label to gadget     */
 #define ES_SLIDER_W 80
 
@@ -89,7 +105,8 @@ struct ESFrame {
  * wants with this font. */
 struct ESGroup {
     const char *name;
-    int first, last;          /* indices into the table                 */
+    int first, last;          /* indices into the table; -1: the row    */
+                              /* that is AmigaOS's, not in the table    */
     int rows;
     int label_w;              /* widest label among the labelled rows   */
     int w, h;                 /* the frame                              */
@@ -101,6 +118,8 @@ struct ESPrefs {
     int value[ES_MAX_SETTINGS];    /* what the gadgets say now        */
     struct Gadget *gadget[ES_MAX_SETTINGS];
     int zone_on[ES_ZONE_COUNT];
+    int off_avail;                 /* AmigaOS has the setting         */
+    int off_was, off_now;          /* windows can move off-screen     */
     const ESSetting *table;
     int count;
     struct Screen *scr;
@@ -202,6 +221,10 @@ static int es_zone_grid_w(struct ESPrefs *p)
     return w + (ES_ZONE_COLS - 1) * ES_LGAP;
 }
 
+static const char es_off_group[] = "AmigaOS";
+static const char es_off_label[] = "Windows can move off-screen:";
+static const char es_off_after[] = "Sensitivity";   /* its place */
+
 static int es_measure(struct ESPrefs *p, struct ESGroup *g, int max)
 {
     int n = 0, i, k;
@@ -232,10 +255,33 @@ static int es_measure(struct ESPrefs *p, struct ESGroup *g, int max)
             }
         }
     }
+    /* AmigaOS's row: a group of its own, after the one it belongs
+     * next to, or last */
+    if (p->off_avail && n < max) {
+        int at = n;
+
+        for (i = 0; i < n; i++) {
+            if (es_same_group(g[i].name, es_off_after)) {
+                at = i + 1;
+                break;
+            }
+        }
+        for (i = n; i > at; i--) {
+            g[i] = g[i - 1];
+        }
+        g[at].name = es_off_group;
+        g[at].first = g[at].last = -1;
+        g[at].rows = 1;
+        g[at].label_w = es_text_w(p, es_off_label);
+        n++;
+    }
     for (i = 0; i < n; i++) {
         int widest = 0;
 
-        for (k = g[i].first; k <= g[i].last; k++) {
+        if (g[i].first < 0) {
+            widest = g[i].label_w + ES_LGAP + p->box_w;
+        }
+        for (k = g[i].first; g[i].first >= 0 && k <= g[i].last; k++) {
             const ESSetting *s = &p->table[k];
             int rw;
 
@@ -460,7 +506,14 @@ static int es_build(struct ESPrefs *p)
             f->h = g[i].h;
             f->title = g[i].name;
         }
-        for (k = g[i].first; k <= g[i].last && gad != NULL; k++) {
+        if (g[i].first < 0) {
+            gad = es_checkbox(p, gad, ES_ID_OFFSCREEN, es_off_label,
+                              PLACETEXT_LEFT,
+                              x + ES_PAD + g[i].label_w + ES_LGAP, gy,
+                              p->off_now);
+        }
+        for (k = g[i].first;
+             g[i].first >= 0 && k <= g[i].last && gad != NULL; k++) {
             const ESSetting *s = &p->table[k];
 
             if (s->kind == ES_SET_ZONES) {
@@ -582,7 +635,9 @@ static void es_changed(struct ESPrefs *p, struct Gadget *gad, UWORD code)
 {
     int id = gad->GadgetID;
 
-    if (id >= ES_ID_ZONE && id < ES_ID_ZONE + ES_ZONE_COUNT) {
+    if (id == ES_ID_OFFSCREEN) {
+        p->off_now = (gad->Flags & GFLG_SELECTED) != 0;
+    } else if (id >= ES_ID_ZONE && id < ES_ID_ZONE + ES_ZONE_COUNT) {
         p->zone_on[id - ES_ID_ZONE] = (gad->Flags & GFLG_SELECTED) != 0;
     } else if (id >= ES_ID_SETTING && id < ES_ID_SETTING + p->count) {
         int i = id - ES_ID_SETTING;
@@ -609,6 +664,39 @@ static void es_changed(struct ESPrefs *p, struct Gadget *gad, UWORD code)
 
 /* ------------------------------------------------------------- main */
 
+/*
+ * AmigaOS's setting, when the box was changed. Writing the live file
+ * makes Intuition ask for the Workbench screen to be reset, with a
+ * requester of its own that says nothing of why: so ours comes first
+ * and says it. Save keeps the setting for good, Use for this session.
+ */
+static int es_store_offscreen(struct ESPrefs *p, int permanent)
+{
+    static struct EasyStruct es;
+
+    if (!p->off_avail || p->off_now == p->off_was) {
+        return 1;
+    }
+    es.es_StructSize = sizeof(es);
+    es.es_Flags = 0;
+    es.es_Title = (UBYTE *)"EdgeSnap Preferences";
+    es.es_TextFormat = (UBYTE *)(permanent ?
+        "\"Windows can move off-screen\" is a setting of AmigaOS.\n"
+        "To change it, AmigaOS now asks to reset the Workbench\n"
+        "screen and names the windows to close first.\n\n"
+        "Close them and press Retry, or press Cancel:\n"
+        "the setting is saved either way, and takes\n"
+        "effect when the system starts again." :
+        "\"Windows can move off-screen\" is a setting of AmigaOS.\n"
+        "To change it, AmigaOS now asks to reset the Workbench\n"
+        "screen and names the windows to close first.\n\n"
+        "Close them and press Retry. With Cancel the\n"
+        "setting stays as it was.");
+    es.es_GadgetFormat = (UBYTE *)"OK";
+    EasyRequestArgs(p->win, &es, NULL, NULL);
+    return eso_set(p->off_now, 1, permanent);
+}
+
 static int es_run(struct ESPrefs *p)
 {
     int rc = RETURN_OK, done = 0;
@@ -620,7 +708,7 @@ static int es_run(struct ESPrefs *p)
                             WA_InnerWidth, p->inner_w,
                             WA_InnerHeight, p->inner_h,
                             WA_Left, 20,
-                            WA_Top, 20,
+                            WA_Top, p->scr->BarHeight + 1,
                             WA_Gadgets, (ESTagData)p->glist,
                             WA_AutoAdjust, TRUE,
                             WA_DragBar, TRUE,
@@ -676,10 +764,16 @@ static int es_run(struct ESPrefs *p)
                     if (!esp_store(&p->cfg, 1)) {
                         rc = RETURN_WARN;
                     }
+                    if (!es_store_offscreen(p, 1)) {
+                        rc = RETURN_WARN;
+                    }
                     done = 1;
                 } else if (gad->GadgetID == ES_ID_USE) {
                     es_collect(p);
                     if (!esp_store(&p->cfg, 0)) {
+                        rc = RETURN_WARN;
+                    }
+                    if (!es_store_offscreen(p, 0)) {
                         rc = RETURN_WARN;
                     }
                     done = 1;
@@ -704,12 +798,78 @@ static int es_run(struct ESPrefs *p)
     return rc;
 }
 
-int main(void)
+static int es_word(const char *a, const char *b)
+{
+    while (*a != '\0' && *b != '\0') {
+        char ca = *a, cb = *b;
+
+        if (ca >= 'a' && ca <= 'z') {
+            ca = (char)(ca - 'a' + 'A');
+        }
+        if (cb >= 'a' && cb <= 'z') {
+            cb = (char)(cb - 'a' + 'A');
+        }
+        if (ca != cb) {
+            return 0;
+        }
+        a++;
+        b++;
+    }
+    return *a == '\0' && *b == '\0';
+}
+
+/* AmigaOS has the setting from intuition.library 47, and the file is
+ * one this program understands (or is not there at all). */
+static int es_offscreen_available(void)
+{
+    struct Library *i47 = OpenLibrary((CONST_STRPTR)"intuition.library", 47);
+
+    if (i47 == NULL) {
+        return 0;
+    }
+    CloseLibrary(i47);
+    return eso_query(0) >= 0 && eso_query(1) >= 0;
+}
+
+/* EdgeSnapPrefs OFFSCREEN QUERY|ON|OFF [BOOTONLY]: no window. */
+static int es_offscreen_command(int argc, char **argv)
+{
+    int bootonly = argc >= 4 && es_word(argv[3], "BOOTONLY");
+    int state;
+
+    if (!es_offscreen_available()) {
+        printf("EdgeSnapPrefs: this system has no such setting\n");
+        return RETURN_ERROR;
+    }
+    if (es_word(argv[2], "QUERY")) {
+        state = eso_query(bootonly);
+        printf("windows can move off-screen: %s\n", state ? "yes" : "no");
+        return state ? RETURN_OK : RETURN_WARN;
+    }
+    if (es_word(argv[2], "ON") || es_word(argv[2], "OFF")) {
+        state = es_word(argv[2], "ON");
+        if (!eso_set(state, !bootonly, 1)) {
+            printf("EdgeSnapPrefs: the IControl preferences could not "
+                   "be written\n");
+            return RETURN_ERROR;
+        }
+        printf("windows can move off-screen: %s%s\n", state ? "yes" : "no",
+               bootonly ? ", from the next start" : "");
+        return RETURN_OK;
+    }
+    printf("EdgeSnapPrefs OFFSCREEN QUERY|ON|OFF [BOOTONLY]\n");
+    return RETURN_ERROR;
+}
+
+int main(int argc, char **argv)
 {
     static struct ESPrefs p;
     int rc = RETURN_FAIL;
 
     (void)es_version_cookie;
+    if (argc >= 3 && es_word(argv[1], "OFFSCREEN")) {
+        return es_offscreen_command(argc, argv);
+    }
     IntuitionBase = (struct IntuitionBase *)
         OpenLibrary((CONST_STRPTR)"intuition.library", 37);
     GfxBase = (struct GfxBase *)OpenLibrary((CONST_STRPTR)"graphics.library", 37);
@@ -719,6 +879,8 @@ int main(void)
         goto out;
     }
     esp_load(&p.cfg);
+    p.off_avail = es_offscreen_available();
+    p.off_was = p.off_now = p.off_avail ? eso_query(0) : 0;
     p.table = es_settings(&p.count);
     if (p.count > ES_MAX_SETTINGS) {
         p.count = ES_MAX_SETTINGS;
