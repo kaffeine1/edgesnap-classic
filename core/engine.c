@@ -19,10 +19,27 @@ static int es_abs(int v)
 void es_engine_config_defaults(ESEngineConfig *cfg)
 {
     cfg->edge_px = 12;
-    cfg->corner_div = 4;
+    /*
+     * The corner only where the pointer stands in it. With a quarter of
+     * the height at each end (corner_div 4, until 2026-09-28) half of
+     * every side edge was corner, and a window dragged sideways by a
+     * title bar in the upper part of the screen landed in a quarter
+     * when a half was meant, which is how most windows are dragged.
+     * The screen's edges stop the pointer, so the corner itself is an
+     * easy target: throw the pointer into it.
+     */
+    cfg->corner_div = 0;
     cfg->drag_min_px = 4;
     cfg->push_px = 24;
     cfg->zones_mask = ES_ZONEMASK_ALL;
+}
+
+int es_engine_corner_px(const ESEngineConfig *cfg, int usable_h)
+{
+    if (cfg->corner_div <= 1) {
+        return 0;
+    }
+    return usable_h / cfg->corner_div;
 }
 
 static void es_actions_clear(ESEngineActions *out)
@@ -147,7 +164,25 @@ void es_engine_motion(ESEngine *e, const ESWinFacts *facts,
         int my = facts->mouse_y;
         const ESRect *u = &facts->usable;
         const ESRect *b = &facts->box;
+        ESRect outline;
         int z;
+
+        /*
+         * Where the dragged window is. A system that moves windows
+         * solid says so in the box. One that drags an outline (AROS,
+         * AmigaOS 3.x) leaves the box where it was until the release,
+         * and the outline is the box moved by the pointer's travel
+         * since the press: that is the window that meets the edge and
+         * pins the pointer, so that is what the push below looks at
+         * (AmigaOS 3.2.3, 2026-09-28: pushed against the edge, nothing
+         * snapped, because the box never came near it).
+         */
+        if (b->x == e->base_box.x && b->y == e->base_box.y) {
+            outline = *b;
+            outline.x = e->base_box.x + (facts->mouse_x - e->base_mx);
+            outline.y = e->base_box.y + (facts->mouse_y - e->base_my);
+            b = &outline;
+        }
 
         /*
          * A window that may not leave the screen (MorphOS as delivered,
@@ -184,7 +219,7 @@ void es_engine_motion(ESEngine *e, const ESWinFacts *facts,
             my = u->y + u->h - 1;
         }
         z = es_zone_from_pointer(u, mx, my, e->cfg.edge_px,
-                                 u->h / e->cfg.corner_div);
+                                 es_engine_corner_px(&e->cfg, u->h));
 
         /* Holding the bypass qualifier, or landing in a zone the user
          * switched off, means "just move the window". */

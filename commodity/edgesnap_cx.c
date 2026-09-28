@@ -3116,14 +3116,26 @@ static void spike_push_config(void)
  * editor, or a script - so there is nothing to co-ordinate with and no
  * protocol to get wrong.
  */
+/* "corner 1/4" for a band, "corner only" for the corner itself. */
+static const char *spike_corner_words(void)
+{
+    static char buf[16];
+
+    if (g_cfg.engine.corner_div <= 1) {
+        return "only";
+    }
+    sprintf(buf, "1/%d", g_cfg.engine.corner_div);
+    return buf;
+}
+
 static void spike_config_reload(void)
 {
     spike_config_load(g_argc, g_argv);
     spike_push_config();
     spike_out("edgesnap: preferences reloaded: zones %04x, edge %d px, "
-              "corner 1/%d, drag %d px,\n",
+              "corner %s, drag %d px,\n",
               (unsigned)g_cfg.engine.zones_mask, g_cfg.engine.edge_px,
-              g_cfg.engine.corner_div, g_cfg.engine.drag_min_px);
+              spike_corner_words(), g_cfg.engine.drag_min_px);
     spike_out("edgesnap:        preview %s, panel detect %s (margin %d), "
               "width cycle %s, glide %s\n",
               g_cfg.preview ? "on" : "off",
@@ -3862,9 +3874,9 @@ int main(int argc, char **argv)
         spike_out("edgesnap: the library in LIBS: is older than 2.9, "
                   "so ctrl alt c (centre) will be refused.\n");
     }
-    spike_out("edgesnap: prefs: zones %04x, edge %d px, corner 1/%d, "
+    spike_out("edgesnap: prefs: zones %04x, edge %d px, corner %s, "
            "drag %d px,\n", (unsigned)g_cfg.engine.zones_mask,
-           g_cfg.engine.edge_px, g_cfg.engine.corner_div,
+           g_cfg.engine.edge_px, spike_corner_words(),
            g_cfg.engine.drag_min_px);
     spike_out("edgesnap:        preview %s, panel detect %s (margin %d), "
            "bypass %s,\n", g_cfg.preview ? "on" : "off",

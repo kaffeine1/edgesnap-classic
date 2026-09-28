@@ -482,6 +482,57 @@ static void test_pinned_pointer_pushing_at_the_edge(void)
     CHECK(a.do_snap == 0);
 }
 
+/*
+ * The same push where windows are dragged as an outline (AmigaOS 3.x,
+ * AROS): the box stays where the drag began, and it is the outline,
+ * the box moved by the pointer's travel, that stops at the edge and
+ * pins the pointer.
+ */
+static void test_pinned_outline_pushing_at_the_edge(void)
+{
+    ESEngine e;
+    ESWinFacts f;
+    ESEngineActions a;
+    int w1, i;
+
+    es_engine_init(&e, 0);
+    std_facts(&f, &w1);             /* box 100,100; press at 200,110 */
+    f.bar_h = 20;
+    es_engine_press(&e, -1, -1, &a);
+    es_engine_motion(&e, &f, &a);   /* baseline, on the bar */
+
+    /* the outline meets the left edge: 100 + (100 - 200) = 0, and
+     * Intuition keeps the pointer 100 pixels in, where it grabbed */
+    f.mouse_x = 100;
+    f.mouse_y = 240;
+    es_engine_motion(&e, &f, &a);
+    CHECK(a.drag_started == 1);
+    CHECK(a.zone == ES_ZONE_NONE);
+    for (i = 0; i < 3; i++) {       /* three pushes of 10 px: 30 > 24 */
+        f.push_x = -10;
+        es_engine_motion(&e, &f, &a);
+    }
+    CHECK(a.zone_changed == 1 && a.zone == ES_ZONE_LEFT);
+    es_engine_release(&e, &a);
+    CHECK(a.do_snap == 1 && a.snap_zone == ES_ZONE_LEFT);
+
+    /* an outline still short of the edge is not pushed anywhere */
+    std_facts(&f, &w1);
+    f.bar_h = 20;
+    es_engine_press(&e, -1, -1, &a);
+    es_engine_motion(&e, &f, &a);
+    f.mouse_x = 120;                /* outline at x 20 */
+    f.mouse_y = 240;
+    es_engine_motion(&e, &f, &a);
+    for (i = 0; i < 5; i++) {
+        f.push_x = -10;
+        es_engine_motion(&e, &f, &a);
+    }
+    CHECK(a.zone == ES_ZONE_NONE);
+    es_engine_release(&e, &a);
+    CHECK(a.do_snap == 0);
+}
+
 /* Pushing while the window is NOT at the edge, or pushing the wrong
  * way, changes nothing: only a wall counts. */
 static void test_push_without_a_wall_is_ignored(void)
@@ -513,10 +564,47 @@ static void test_push_without_a_wall_is_ignored(void)
     CHECK(a.do_snap == 0);
 }
 
+/*
+ * With the settings as they come, a window dragged sideways by a title
+ * bar just under the screen's bar snaps to the half; pushed on up into
+ * the screen's bar it takes the quarter, and back down it is a half
+ * again.
+ */
+static void test_default_corner_is_the_corner(void)
+{
+    ESEngine e;
+    ESWinFacts f;
+    ESEngineActions a;
+    int w1;
+
+    es_engine_init(&e, 0);
+    std_facts(&f, &w1);
+    start_drag(&e, &f);
+
+    f.mouse_x = 2;
+    f.mouse_y = 20;                  /* the usable area starts at 12 */
+    f.box.x = -98;
+    es_engine_motion(&e, &f, &a);
+    CHECK(a.zone_changed == 1 && a.zone == ES_ZONE_LEFT);
+
+    f.mouse_y = 4;                   /* in the screen's bar */
+    es_engine_motion(&e, &f, &a);
+    CHECK(a.zone_changed == 1 && a.zone == ES_ZONE_TOP_LEFT);
+
+    f.mouse_y = 30;
+    es_engine_motion(&e, &f, &a);
+    CHECK(a.zone_changed == 1 && a.zone == ES_ZONE_LEFT);
+
+    es_engine_release(&e, &a);
+    CHECK(a.do_snap == 1 && a.snap_zone == ES_ZONE_LEFT);
+}
+
 int main(void)
 {
     test_happy_left_snap();
+    test_default_corner_is_the_corner();
     test_pinned_pointer_pushing_at_the_edge();
+    test_pinned_outline_pushing_at_the_edge();
     test_push_without_a_wall_is_ignored();
     test_click_without_drag();
     test_app_moves_window_alone();
