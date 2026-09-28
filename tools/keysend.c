@@ -27,13 +27,19 @@
  *   keysend SCREENS                        list the screens, which one is
  *                                          Workbench's, and the public
  *                                          ones with the default named
- *   keysend IDRAG x0 y0 x1 y1 [steps] [ADD]
+ *   keysend IDRAG x0 y0 x1 y1 [steps] [ADD] [HOLD]
  *                                          a drag written into input.device
  *                                          itself (IND_WRITEEVENT, or with
- *                                          ADD the V47 IND_ADDEVENT), so
- *                                          that its own idea of the button
- *                                          follows; prints what
- *                                          PeekQualifier() says meanwhile
+ *                                          ADD the V47 IND_ADDEVENT); HOLD
+ *                                          leaves the button down
+ *   keysend IAT x y                        the pointer there, button held
+ *   keysend IPUSH dx dy [n]                n relative mouse steps with the
+ *                                          button held: a hand pushing a
+ *                                          window against an edge
+ *   keysend IUP                            the button released
+ *   keysend WINBOX "title" x y w h         put the window of that title,
+ *                                          on the default public screen,
+ *                                          at that place and size
  *   keysend OFFSCREEN                      open a small window that does
  *                                          not take the focus, ask to move
  *                                          it past the right edge of the
@@ -247,120 +253,198 @@ static void raw(WORD x, WORD y, UWORD code, int held)
 }
 
 /*
- * A drag through input.device rather than past it. AddIEvents() puts
- * the events into the stream after input.device, whose own record of
- * the buttons stays "up"; the timer events it sends ten times a second
- * carry that record, and Intuition, seeing the button up, ends a window
- * drag after its first step (2026-09-24 and 27). Written to the device,
- * the press may change the record, and the drag last.
+ * A drag through input.device rather than past it. A window drag whose
+ * events go through AddIEvents() moves by its first step only; written
+ * to input.device the same events drag a window all the way (see the
+ * notes at the top). One device session per keysend run.
  */
-static void idrag(int x0, int y0, int x1, int y1, int steps, int add)
+static struct MsgPort *g_iport;
+static struct IOStdReq *g_ireq;
+static int g_iadd;              /* IND_ADDEVENT rather than IND_WRITEEVENT */
+static struct Screen *g_iscr;   /* the default public screen, locked */
+
+static int in_open(int add)
+{
+    IntuitionBase = (struct IntuitionBase *)
+        OpenLibrary((CONST_STRPTR)"intuition.library", 39);
+    if (IntuitionBase == NULL) {
+        return 0;
+    }
+    g_iport = CreateMsgPort();
+    g_ireq = g_iport ? (struct IOStdReq *)CreateIORequest(g_iport,
+                                                          sizeof(*g_ireq))
+                     : NULL;
+    if (g_ireq == NULL || OpenDevice((CONST_STRPTR)"input.device", 0,
+                                     (struct IORequest *)g_ireq, 0) != 0) {
+        printf("keysend: input.device would not open\n");
+        if (g_ireq != NULL) {
+            DeleteIORequest((struct IORequest *)g_ireq);
+        }
+        if (g_iport != NULL) {
+            DeleteMsgPort(g_iport);
+        }
+        g_ireq = NULL;
+        g_iport = NULL;
+        CloseLibrary((struct Library *)IntuitionBase);
+        IntuitionBase = NULL;
+        return 0;
+    }
+    InputBase = g_ireq->io_Device;
+    g_iadd = add;
+    if (g_iadd && InputBase->dd_Library.lib_Version < 47) {
+        printf("keysend: input.device %d has no IND_ADDEVENT, writing "
+               "instead\n", (int)InputBase->dd_Library.lib_Version);
+        g_iadd = 0;
+    }
+    g_iscr = LockPubScreen(NULL);
+    return 1;
+}
+
+static void in_send(struct InputEvent *ev)
+{
+    g_ireq->io_Command = g_iadd ? IND_ADDEVENT : IND_WRITEEVENT;
+    g_ireq->io_Data = (APTR)ev;
+    g_ireq->io_Length = sizeof(*ev);
+    g_ireq->io_Flags = 0;
+    DoIO((struct IORequest *)g_ireq);
+}
+
+static void in_close(void)
+{
+    if (g_iscr != NULL) {
+        UnlockPubScreen(NULL, g_iscr);
+        g_iscr = NULL;
+    }
+    CloseDevice((struct IORequest *)g_ireq);
+    DeleteIORequest((struct IORequest *)g_ireq);
+    DeleteMsgPort(g_iport);
+    g_ireq = NULL;
+    g_iport = NULL;
+    InputBase = NULL;
+    CloseLibrary((struct Library *)IntuitionBase);
+    IntuitionBase = NULL;
+}
+
+/* The pointer at a pixel of the default public screen, the button held
+ * or not. The event names pp, so both live as long as the program. */
+static void in_at(int x, int y, int held)
 {
     static struct InputEvent ev;
     static struct IEPointerPixel pp;
-    struct MsgPort *port;
-    struct IOStdReq *io;
-    struct Screen *scr;
+
+    memset(&ev, 0, sizeof(ev));
+    pp.iepp_Screen = g_iscr;
+    pp.iepp_Position.X = (WORD)x;
+    pp.iepp_Position.Y = (WORD)y;
+    ev.ie_Class = IECLASS_NEWPOINTERPOS;
+    ev.ie_SubClass = IESUBCLASS_PIXEL;
+    ev.ie_Code = IECODE_NOBUTTON;
+    ev.ie_Qualifier = held ? IEQUALIFIER_LEFTBUTTON : 0;
+    ev.ie_EventAddress = &pp;
+    in_send(&ev);
+}
+
+/* The left button, as the mouse reports it: no movement of its own. */
+static void in_button(int down)
+{
+    static struct InputEvent ev;
+
+    memset(&ev, 0, sizeof(ev));
+    ev.ie_Class = IECLASS_RAWMOUSE;
+    ev.ie_Code = down ? IECODE_LBUTTON : (IECODE_LBUTTON | IECODE_UP_PREFIX);
+    ev.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE |
+                      (down ? IEQUALIFIER_LEFTBUTTON : 0);
+    in_send(&ev);
+}
+
+/* The mouse moving by (dx, dy) counts with the button held, as a hand
+ * pushing a window against an edge makes it: relative raw events. */
+static void in_push(int dx, int dy)
+{
+    static struct InputEvent ev;
+
+    memset(&ev, 0, sizeof(ev));
+    ev.ie_Class = IECLASS_RAWMOUSE;
+    ev.ie_Code = IECODE_NOBUTTON;
+    ev.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE | IEQUALIFIER_LEFTBUTTON;
+    ev.ie_X = (WORD)dx;
+    ev.ie_Y = (WORD)dy;
+    in_send(&ev);
+}
+
+static void idrag(int x0, int y0, int x1, int y1, int steps, int add,
+                  int hold)
+{
     int i;
+
+    if (!in_open(add)) {
+        return;
+    }
+    if (steps < 1) {
+        steps = 1;
+    }
+    printf("idrag: %s, qualifier before %04x\n",
+           g_iadd ? "IND_ADDEVENT" : "IND_WRITEEVENT",
+           (unsigned)PeekQualifier());
+    in_at(x0, y0, 0);
+    Delay(10);
+    in_button(1);
+    Delay(10);
+    printf("idrag: qualifier after the press %04x\n",
+           (unsigned)PeekQualifier());
+    for (i = 1; i <= steps; i++) {
+        in_at(x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps, 1);
+        Delay(4);
+    }
+    Delay(20);
+    printf("idrag: pointer %d %d%s\n",
+           g_iscr ? (int)g_iscr->MouseX : -1, g_iscr ? (int)g_iscr->MouseY : -1,
+           hold ? ", button still held (IUP releases it)" : "");
+    if (!hold) {
+        in_button(0);
+        Delay(10);
+    }
+    in_close();
+}
+
+/*
+ * Put a window back where a test wants it. The window is found by its
+ * title under the Intuition lock; ChangeWindowBox() is called after the
+ * lock is let go, as it must be: a window that closes in between is the
+ * bench's own business.
+ */
+static void winbox(const char *title, int x, int y, int w, int h)
+{
+    struct Screen *scr;
+    struct Window *win, *found = NULL;
+    ULONG lock;
 
     IntuitionBase = (struct IntuitionBase *)
         OpenLibrary((CONST_STRPTR)"intuition.library", 39);
     if (IntuitionBase == NULL) {
         return;
     }
-    port = CreateMsgPort();
-    io = port ? (struct IOStdReq *)CreateIORequest(port, sizeof(*io)) : NULL;
-    if (io == NULL || OpenDevice((CONST_STRPTR)"input.device", 0,
-                                 (struct IORequest *)io, 0) != 0) {
-        printf("idrag: input.device would not open\n");
-        if (io != NULL) {
-            DeleteIORequest((struct IORequest *)io);
-        }
-        if (port != NULL) {
-            DeleteMsgPort(port);
-        }
-        CloseLibrary((struct Library *)IntuitionBase);
-        IntuitionBase = NULL;
-        return;
-    }
-    InputBase = io->io_Device;
-    if (add && InputBase->dd_Library.lib_Version < 47) {
-        printf("idrag: input.device %d has no IND_ADDEVENT, writing instead\n",
-               (int)InputBase->dd_Library.lib_Version);
-        add = 0;
-    }
     scr = LockPubScreen(NULL);
-    if (steps < 1) {
-        steps = 1;
-    }
-    printf("idrag: %s, qualifier before %04x\n",
-           add ? "IND_ADDEVENT" : "IND_WRITEEVENT", (unsigned)PeekQualifier());
-
-#define KS_SEND() do { \
-        io->io_Command = add ? IND_ADDEVENT : IND_WRITEEVENT; \
-        io->io_Data = (APTR)&ev; \
-        io->io_Length = sizeof(ev); \
-        io->io_Flags = 0; \
-        DoIO((struct IORequest *)io); \
-    } while (0)
-
-    /* where the drag starts */
-    memset(&ev, 0, sizeof(ev));
-    pp.iepp_Screen = scr;
-    pp.iepp_Position.X = (WORD)x0;
-    pp.iepp_Position.Y = (WORD)y0;
-    ev.ie_Class = IECLASS_NEWPOINTERPOS;
-    ev.ie_SubClass = IESUBCLASS_PIXEL;
-    ev.ie_Code = IECODE_NOBUTTON;
-    ev.ie_EventAddress = &pp;
-    KS_SEND();
-    Delay(10);
-
-    /* the press, as the mouse reports it */
-    memset(&ev, 0, sizeof(ev));
-    ev.ie_Class = IECLASS_RAWMOUSE;
-    ev.ie_Code = IECODE_LBUTTON;
-    ev.ie_Qualifier = IEQUALIFIER_LEFTBUTTON | IEQUALIFIER_RELATIVEMOUSE;
-    KS_SEND();
-    Delay(10);
-    printf("idrag: qualifier after the press %04x\n", (unsigned)PeekQualifier());
-
-    /* the way, a pixel position at a time, the button held */
-    for (i = 1; i <= steps; i++) {
-        memset(&ev, 0, sizeof(ev));
-        pp.iepp_Screen = scr;
-        pp.iepp_Position.X = (WORD)(x0 + (x1 - x0) * i / steps);
-        pp.iepp_Position.Y = (WORD)(y0 + (y1 - y0) * i / steps);
-        ev.ie_Class = IECLASS_NEWPOINTERPOS;
-        ev.ie_SubClass = IESUBCLASS_PIXEL;
-        ev.ie_Code = IECODE_NOBUTTON;
-        ev.ie_Qualifier = IEQUALIFIER_LEFTBUTTON;
-        ev.ie_EventAddress = &pp;
-        KS_SEND();
-        Delay(4);
-    }
-    Delay(20);
-    printf("idrag: qualifier before the release %04x, pointer %d %d\n",
-           (unsigned)PeekQualifier(),
-           scr ? (int)scr->MouseX : -1, scr ? (int)scr->MouseY : -1);
-
-    /* the release */
-    memset(&ev, 0, sizeof(ev));
-    ev.ie_Class = IECLASS_RAWMOUSE;
-    ev.ie_Code = IECODE_LBUTTON | IECODE_UP_PREFIX;
-    ev.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE;
-    KS_SEND();
-    Delay(10);
-    printf("idrag: qualifier after the release %04x\n", (unsigned)PeekQualifier());
-#undef KS_SEND
-
     if (scr != NULL) {
+        lock = LockIBase(0);
+        for (win = scr->FirstWindow; win != NULL; win = win->NextWindow) {
+            if (win->Title != NULL && strcmp((const char *)win->Title, title) == 0) {
+                found = win;
+                break;
+            }
+        }
+        UnlockIBase(lock);
+        if (found != NULL) {
+            ChangeWindowBox(found, (LONG)x, (LONG)y, (LONG)w, (LONG)h);
+            Delay(10);
+            printf("winbox: \"%s\" now %d,%d %dx%d\n", title,
+                   (int)found->LeftEdge, (int)found->TopEdge,
+                   (int)found->Width, (int)found->Height);
+        } else {
+            printf("winbox: no window \"%s\"\n", title);
+        }
         UnlockPubScreen(NULL, scr);
     }
-    CloseDevice((struct IORequest *)io);
-    DeleteIORequest((struct IORequest *)io);
-    DeleteMsgPort(port);
-    InputBase = NULL;
     CloseLibrary((struct Library *)IntuitionBase);
     IntuitionBase = NULL;
 }
@@ -541,10 +625,44 @@ int main(int argc, char **argv)
     } else if (same(argv[1], "OFFSCREEN")) {
         offscreen();
     } else if (same(argv[1], "IDRAG") && argc >= 6) {
+        int steps = 12, add = 0, hold = 0, k;
+
+        for (k = 6; k < argc; k++) {
+            if (same(argv[k], "ADD")) {
+                add = 1;
+            } else if (same(argv[k], "HOLD")) {
+                hold = 1;
+            } else if (argv[k][0] >= '0' && argv[k][0] <= '9') {
+                steps = atoi(argv[k]);
+            }
+        }
         idrag(atoi(argv[2]), atoi(argv[3]), atoi(argv[4]), atoi(argv[5]),
-              argc >= 7 ? atoi(argv[6]) : 12,
-              (argc >= 8 && same(argv[7], "ADD")) ||
-              (argc == 7 && same(argv[6], "ADD")));
+              steps, add, hold);
+    } else if (same(argv[1], "IAT") && argc >= 4) {
+        if (in_open(0)) {
+            in_at(atoi(argv[2]), atoi(argv[3]), 1);
+            Delay(5);
+            in_close();
+        }
+    } else if (same(argv[1], "IPUSH") && argc >= 4) {
+        int n = argc >= 5 ? atoi(argv[4]) : 1, k;
+
+        if (in_open(0)) {
+            for (k = 0; k < n; k++) {
+                in_push(atoi(argv[2]), atoi(argv[3]));
+                Delay(2);
+            }
+            in_close();
+        }
+    } else if (same(argv[1], "WINBOX") && argc >= 7) {
+        winbox(argv[2], atoi(argv[3]), atoi(argv[4]), atoi(argv[5]),
+               atoi(argv[6]));
+    } else if (same(argv[1], "IUP")) {
+        if (in_open(0)) {
+            in_button(0);
+            Delay(10);
+            in_close();
+        }
     } else if (same(argv[1], "WHERE")) {
         IntuitionBase = (struct IntuitionBase *)
             OpenLibrary((CONST_STRPTR)"intuition.library", 36);
