@@ -141,6 +141,7 @@ static void spike_sl_hide(void);
 #include <cybergraphx/cybergraphics.h>
 #include <proto/cybergraphics.h>
 struct Library *CyberGfxBase;
+#define ES_PF_CGX 1            /* the masked frame reads through CGX */
 #define ES_PF_FORMAT RECTFMT_ARGB
 #define ES_PF_READ(rp, x, y, buf, mod, w, h) \
     ReadPixelArray((buf), 0, 0, (UWORD)(mod), (rp), (UWORD)(x), (UWORD)(y), \
@@ -148,6 +149,30 @@ struct Library *CyberGfxBase;
 #define ES_PF_WRITE(buf, mod, rp, x, y, w, h) \
     WritePixelArray((buf), 0, 0, (UWORD)(mod), (rp), (UWORD)(x), (UWORD)(y), \
                     (UWORD)(w), (UWORD)(h), ES_PF_FORMAT)
+static void spike_pf_drop_now(void);    /* from the input handler */
+#elif defined(ES_CLASSIC)
+/*
+ * The classic systems drag a window as an outline too, and Intuition
+ * holds every layer of the screen for as long as the drag lasts: a
+ * window opened meanwhile appears only at the release, when the frame
+ * is being taken down. The four bars of MorphOS were never seen during
+ * a drag on AmigaOS 3.2.3 (2026-09-28). So the frame is drawn on the
+ * screen, as AROS draws it, in its plain form: a band inverted in
+ * COMPLEMENT. It needs no pixel reads, which a classic system without
+ * cybergraphics could not do, it composes with Intuition's own outline,
+ * and drawn a second time it is gone; the input handler takes it down
+ * on the release, ahead of Intuition. On the four-colour Workbench the
+ * inverse of the grey is the blue.
+ */
+#define ES_PREVIEW_XOR 1
+/* The masked frame reads pixels; the classic one is always the plain
+ * inversion (spike_pf_accent_bytes), so these are never reached. */
+static ULONG es_pf_no_pixels(void)
+{
+    return 0;
+}
+#define ES_PF_READ(rp, x, y, buf, mod, w, h) es_pf_no_pixels()
+#define ES_PF_WRITE(buf, mod, rp, x, y, w, h) ((void)es_pf_no_pixels())
 static void spike_pf_drop_now(void);    /* from the input handler */
 #else
 #define ES_PREVIEW_WINDOWS 1
@@ -937,6 +962,17 @@ static void spike_pf_strips(const ESRect *r, ESRect *strip, int *count)
 {
     int t = ES_FRAME_PX;
 
+#ifdef ES_CLASSIC
+    /* An inverted band of four pixels is a thin line on a tall screen:
+     * one pixel more for every 120 lines, up to eight. */
+    if (g_pf.scr != NULL && g_pf.scr->Height / 120 > t) {
+        t = g_pf.scr->Height / 120;
+        if (t > 8) {
+            t = 8;
+        }
+    }
+#endif
+
     if (r->w < 2 * t || r->h < 2 * t) {
         t = 1;
     }
@@ -1003,6 +1039,9 @@ static void spike_pf_accent_bytes(void)
     g_pf.accent[3] = (UBYTE)(rgb[2] >> 24);
     /* on 15 and 16 bits a written colour does not read back as itself */
     g_pf.shallow = GetBitMapAttr(g_pf.scr->RastPort.BitMap, BMA_DEPTH) < 24;
+#ifdef ES_CLASSIC
+    g_pf.shallow = 1;            /* no pixel reads here: the plain frame */
+#endif
     g_pf.trust = -1;             /* a new screen: probe again */
     {
         /* EDGESNAP_FRAME_PLAIN in ENV: forces the plain inversion, so
@@ -1010,7 +1049,8 @@ static void spike_pf_accent_bytes(void)
          * a driver whose reads are fine. A test hook, not a setting. */
         char buf[8];
 
-        if (GetVar("EDGESNAP_FRAME_PLAIN", buf, sizeof(buf), 0) > 0) {
+        if (GetVar((CONST_STRPTR)"EDGESNAP_FRAME_PLAIN", (STRPTR)buf,
+                   sizeof(buf), 0) > 0) {
             g_pf.trust = 0;
         }
     }
@@ -1333,7 +1373,9 @@ static void spike_pf_show(struct Screen *dragscr, const ESRect *r)
     spike_pf_paint();
 #else
     spike_pf_free_buffers();   /* a frame the handler took down left them */
-    for (i = 0; i < g_pf.strips; i++) {
+    for (i = 0; i < g_pf.strips && !g_pf.shallow; i++) {
+        /* a shallow screen gets the plain inversion, which reads and
+         * keeps nothing: no buffers for it */
         ULONG bytes = (ULONG)(g_pf.strip[i].w * g_pf.strip[i].h * ES_PF_BPP);
 
         g_pf.saved[i] = (UBYTE *)AllocVec(bytes, MEMF_ANY);
@@ -3641,7 +3683,7 @@ static void spike_handle_hotkey(LONG id)
 
 static void spike_close_libs(void)
 {
-#ifdef ES_PREVIEW_XOR
+#ifdef ES_PF_CGX
     if (CyberGfxBase != NULL) {
         CloseLibrary(CyberGfxBase);
         CyberGfxBase = NULL;
@@ -3679,7 +3721,7 @@ static int spike_open_libs(void)
 {
     IntuitionBase = (void *)OpenLibrary((CONST_STRPTR)"intuition.library", 36);
     GfxBase = (void *)OpenLibrary((CONST_STRPTR)"graphics.library", 36);
-#ifdef ES_PREVIEW_XOR
+#ifdef ES_PF_CGX
     CyberGfxBase = OpenLibrary("cybergraphics.library", 41);
     if (CyberGfxBase == NULL) {
         return 0;
