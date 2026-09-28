@@ -80,9 +80,11 @@ fi
 cp "$ROOT/LICENSE"                     "$DEST/LICENSE"
 
 cp "$ROOT/installer/Install"           "$DEST/Install"
-cp "$ROOT/assets/icons/install-es.info" "$DEST/Install.info"
-cp "$ROOT/assets/icons/guide.info"      "$DEST/EdgeSnap.guide.info"
-cp "$ROOT/assets/icons/readme.info"     "$DEST/EdgeSnap.readme.info"
+# Carlo Spadoni's, one icon each for AmigaOS 4 and MorphOS
+# (scripts/make-system-icons.py).
+cp "$ROOT/assets/Install.info"          "$DEST/Install.info"
+cp "$ROOT/assets/EdgeSnap.guide.info"   "$DEST/EdgeSnap.guide.info"
+cp "$ROOT/assets/EdgeSnap.readme.info"  "$DEST/EdgeSnap.readme.info"
 
 "$ROOT/scripts/make-guide.sh" "$DEST/EdgeSnap.guide" >/dev/null
 
@@ -104,7 +106,7 @@ go fills that half or quarter of the screen.
   - two windows side by side share their edge: press the seam and the
     pointer becomes a double arrow, drag it and both are resized;
   - hotkeys for those who prefer them (ctrl alt cursor keys, ctrl alt c
-    for the middle of the screen, ctrl alt space for a selector under
+    for the middle of the screen, ctrl alt z for a selector under
     the pointer);
   - it is a commodity: it starts with the system and Exchange enables,
     disables or removes it like any other.

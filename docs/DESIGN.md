@@ -921,7 +921,11 @@ of this verification.
 
 - **A selector on a hotkey (first cut done, 2026-09-18).** The macOS
   tiling menu a tester posted (2026-09-06) puts the choices in front
-  of the pointer. `ctrl alt space` opens a palette under the pointer
+  of the pointer. `ctrl alt z` opens a palette under the pointer (it
+  was `ctrl alt space` until real MorphOS hardware showed that
+  combination taken: MorphOS switches keymaps on it when more than one
+  is set up, and got the first press every time; z as in Windows'
+  Win+Z, which opens the same kind of picker)
   that is the map of the screen: nine cells in three rows, each where
   the window would go, the corners in the corners, the halves at the
   sides, maximise at the top in the middle (the top edge maximises in
@@ -950,7 +954,14 @@ of this verification.
   pending can be folded into it, and eight boxes felt slow, because
   each waits for the application's redraw. So 2.14 waits for Intuition
   to take every box and uses three to five of them, and with that the
-  glide was judged good enough to be the default. The
+  glide was judged good enough to be the default. 2.17 waits longer
+  for the first box of every glide, because the first programmatic
+  resize after MorphOS has started is slow and was being folded. A
+  heavy application window (a large MUI window, 2026-09-25) can still
+  jump at its first snap, while it builds its layout for a new size,
+  and glide from then on: left that way on purpose, since waiting for
+  it would show a pause before the motion, and a jump is the honest
+  answer to an expensive redraw. The
   shape lives in `core/zones.c` so the host tests can hold it: four to
   eight boxes, eased out, a whole glide inside a fifth of a second,
   and `es_glide_steps()` returns 0 for a move too short to read as
