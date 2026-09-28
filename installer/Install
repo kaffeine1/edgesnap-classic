@@ -16,12 +16,14 @@
 ; EdgeSnap does at length is the guide's to say.
 (set #welcome
   (cat "EdgeSnap " #app-version "\n"
-       "Window snapping for AmigaOS 3.1 and later, AmigaOS 4.x, "
-       "MorphOS and AROS\n"
+       "Window snapping for AmigaOS, MorphOS and AROS\n"
        "by Michele Dipace <michele.dipace@kaffeine.net>\n"
-       "MIT license. Icons by Carlo Spadoni.\n\n"
+       "MIT license. Icons by Carlo Spadoni.\n"
        "Drag a window to a screen edge or corner and it fills that "
        "half or quarter of the screen."))
+; Six lines, no blank one: on a 640x256 Workbench with topaz 8 the
+; Installer of AmigaOS 3.2 has room for six above the box that picks
+; the installation mode, and a seventh ran under its title.
 
 (set #ask-system "Which system is this?")
 (set #ask-system-help

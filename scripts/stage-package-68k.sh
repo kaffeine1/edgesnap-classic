@@ -41,12 +41,21 @@ cp "$ROOT/assets/m68k/EdgeSnapPrefs.info" "$DEST/m68k/EdgeSnapPrefs.info"
 
 cp "$ROOT/LICENSE"                       "$DEST/LICENSE"
 cp "$ROOT/installer/Install"             "$DEST/Install"
-cp "$ROOT/assets/icons/install-es.info"  "$DEST/Install.info"
-cp "$ROOT/assets/icons/guide.info"       "$DEST/EdgeSnap.guide.info"
-cp "$ROOT/assets/icons/readme.info"      "$DEST/EdgeSnap.readme.info"
+# Carlo Spadoni's pictures for Install, the guide and the readme, the
+# same icons as the other systems' package: his ARGB with IMAG copies,
+# which icon.library 44 and later show on a classic system too.
+cp "$ROOT/assets/Install.info"           "$DEST/Install.info"
+cp "$ROOT/assets/EdgeSnap.guide.info"    "$DEST/EdgeSnap.guide.info"
+cp "$ROOT/assets/EdgeSnap.readme.info"   "$DEST/EdgeSnap.readme.info"
 
-"$ROOT/scripts/make-guide.sh" "$DEST/EdgeSnap.guide" \
-    "$ROOT/packaging/EdgeSnap-68k.guide.in" >/dev/null
+# The classic guide is the other systems' one with the passages that
+# differ here replaced (scripts/derive-68k-guide.py), made fresh each
+# time so it cannot fall behind.
+GUIDE_IN=$(mktemp "${TMPDIR:-/tmp}/edgesnap-68k-guide.XXXXXX")
+python3 "$ROOT/scripts/derive-68k-guide.py" \
+    "$ROOT/packaging/EdgeSnap.guide.in" "$GUIDE_IN"
+"$ROOT/scripts/make-guide.sh" "$DEST/EdgeSnap.guide" "$GUIDE_IN" >/dev/null
+rm -f "$GUIDE_IN"
 
 cat > "$DEST/EdgeSnap.readme" <<'EOR'
 Short:        Tile windows by dragging them to an edge
@@ -108,7 +117,8 @@ cat > "$DEST/EdgeSnap.prefs" <<'EOR'
 # ZONES       which zones react: all | none | halves | corners |
 #             left,right,topleft,topright,bottomleft,bottomright,maximize
 # EDGEPX      how close to an edge the POINTER must be (default 12)
-# CORNERDIV   corner length = usable height / this (default 4)
+# CORNERDIV   0: a corner only where the pointer is pushed into it
+#             (default); 2..16: a band, usable height / this
 # DRAGMINPX   pointer travel before a drag counts (default 4)
 # PREVIEW     show the zone preview frame: yes | no
 # PANELDETECT reserve dock/panel strips: yes | no

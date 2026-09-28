@@ -20,7 +20,7 @@ if [ "$HDR_VERSION" != "$VERSION" ]; then
 fi
 for pair in \
     "installer/Install:(set #app-version \"$VERSION beta\")" \
-    "packaging/EdgeSnap-68k.guide.in:EdgeSnap $VERSION beta" \
+    "packaging/EdgeSnap.guide.in:EdgeSnap $VERSION beta" \
     "scripts/stage-package-68k.sh:Version:      $VERSION (beta)"
 do
     f="${pair%%:*}"
