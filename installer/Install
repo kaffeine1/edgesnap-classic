@@ -451,16 +451,21 @@
 
 ; What was changed outside EdgeSnap is said on a page of its own, to
 ; every user level: nobody should find a system setting different and
-; not know who did it, or how to have it back.
+; not know who did it, or how to have it back. And the first thing on
+; it is what the user has to do: the setting waits for a restart, and
+; until then the one thing EdgeSnap is installed for, dragging a window
+; to an edge, does nothing. Someone who misses that concludes that
+; EdgeSnap does not work.
 (if (= #offscreen 1)
     (message
-      (cat "One setting of AmigaOS was changed.\n\n"
-           "Windows can now move off-screen, from the next time the "
-           "system starts. Without that, a window dragged to an edge "
-           "stops there and holds the pointer back, and nothing snaps.\n\n"
-           "Until the system has started again the hotkeys work, "
-           "dragging does not.\n\n"
-           "To have it as it was: SYS:Prefs/EdgeSnap, the box "
+      (cat "PLEASE RESTART THE SYSTEM when this installation is over.\n\n"
+           "Until then the hotkeys work, and dragging a window to an "
+           "edge does not snap it.\n\n"
+           "AmigaOS stops a dragged window at the edge, before the "
+           "pointer gets there. EdgeSnap has turned on the setting of "
+           "AmigaOS that lets windows move off-screen, and AmigaOS "
+           "takes it up when it starts.\n\n"
+           "To undo it: SYS:Prefs/EdgeSnap, the box "
            "\"Windows can move off-screen\".")
       (all)))
 
@@ -477,7 +482,7 @@
                    "    one line in S:User-Startup\n"))
            "    " (tackon #guide-dest "EdgeSnap.guide") "\n\n"
            (if (= #offscreen 1)
-               "Restart the system once before dragging windows.\n"
+               "NOW RESTART THE SYSTEM: dragging needs it, once.\n"
                "The drawer you ran this from can be deleted.\n")
            (if (= #old-preview 1)
                (cat "\nThe copy of the first preview in C: was removed. Its "

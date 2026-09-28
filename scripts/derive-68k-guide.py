@@ -88,8 +88,10 @@ holds the title bar. It never reaches the edge, so a drag never snaps;
 the hotkeys and the selector still do.
 
 So the first time EdgeSnap is installed, the installer turns on the
-setting of AmigaOS that lets windows move off-screen, and it takes
-effect when the system starts again. It is the box
+setting of AmigaOS that lets windows move off-screen.
+@{b}Restart the system after that first installation@{ub}: AmigaOS
+takes the setting up when it starts, and until then a dragged window
+does not snap. The installer says so as well. It is the box
 @{b}Can Move Off-screen@{ub} in @{b}SYS:Prefs/IControl@{ub}, and
 EdgeSnap's own preferences have it too, as
 @{b}Windows can move off-screen@{ub}: that is where to turn it back.
