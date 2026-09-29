@@ -107,6 +107,10 @@
  *       installer and the preferences look after. With corners of no
  *       length the top edge is the screen's title bar, so a window
  *       that sits at the top is not in the maximize zone when touched.
+ *   2.20 - the classic systems only. The glide is off as the settings
+ *       come: 68k machines differ too much in speed for one default,
+ *       and without a graphics card a glide can crawl. ES_OPT_Animate
+ *       and the ANIMATE setting turn it on as before.
  */
 #define ES_API_VERSION       2
 /* A client that uses a vector appended after 2.2 must check that the

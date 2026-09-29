@@ -39,6 +39,7 @@ typedef struct ESConfig {
     int preview;             /* show the zone preview frame             */
     int cycle_sizes;         /* same hotkey again = next width          */
     int animate;             /* glide into the zone instead of jumping  */
+                             /* (default: ES_CONFIG_ANIMATE_DEFAULT)    */
     int bypass_qual;         /* ES_QUAL_*                               */
 } ESConfig;
 
@@ -104,6 +105,18 @@ typedef struct ESSetting {
  * interface - and until they shared these, the tag door let through
  * margins the parser rejected.
  */
+/*
+ * Whether a snap glides as the settings come. Yes where the machines
+ * are of a kind; the classic lane builds with 0, because the 68k
+ * machines are not: what is a fifth of a second on an accelerated
+ * system with a graphics card is a slow crawl of redraws on a plain
+ * one, all the more on the native chipset. There each user turns the
+ * glide on for the machine in front of them.
+ */
+#ifndef ES_CONFIG_ANIMATE_DEFAULT
+#define ES_CONFIG_ANIMATE_DEFAULT 1
+#endif
+
 #define ES_EDGE_PX_MIN        1
 #define ES_EDGE_PX_MAX      200
 /* CORNERDIV 0 and 1: only the corner itself, the pointer at or beyond

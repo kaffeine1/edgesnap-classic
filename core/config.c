@@ -20,7 +20,7 @@ void es_config_defaults(ESConfig *cfg)
     cfg->panel_margin = ES_PANEL_MARGIN_PX;
     cfg->preview = 1;
     cfg->cycle_sizes = 1;
-    cfg->animate = 1;
+    cfg->animate = ES_CONFIG_ANIMATE_DEFAULT;
     cfg->bypass_qual = ES_QUAL_NONE;
 }
 

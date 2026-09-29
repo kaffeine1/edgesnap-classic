@@ -14,7 +14,10 @@ TEMPLATE="${2:-$ROOT/packaging/EdgeSnap.guide.in}"
 GEN="$ROOT/build/host/settings_guide"
 
 mkdir -p "$(dirname "$OUT")" "$ROOT/build/host"
-cc -std=c89 -pedantic -Wall -Wextra -I"$ROOT/core" -I"$ROOT/include" \
+# GUIDE_CFLAGS: a package whose defaults differ says so here, so that
+# the defaults the guide prints are the ones its programs have.
+cc -std=c89 -pedantic -Wall -Wextra ${GUIDE_CFLAGS:-} \
+   -I"$ROOT/core" -I"$ROOT/include" \
    "$ROOT/tools/settings_guide.c" "$ROOT/core/config.c" \
    "$ROOT/core/engine.c" "$ROOT/core/zones.c" "$ROOT/core/panels.c" \
    -o "$GEN"

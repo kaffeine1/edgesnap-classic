@@ -54,7 +54,10 @@ cp "$ROOT/assets/EdgeSnap.readme.info"   "$DEST/EdgeSnap.readme.info"
 GUIDE_IN=$(mktemp "${TMPDIR:-/tmp}/edgesnap-68k-guide.XXXXXX")
 python3 "$ROOT/scripts/derive-68k-guide.py" \
     "$ROOT/packaging/EdgeSnap.guide.in" "$GUIDE_IN"
-"$ROOT/scripts/make-guide.sh" "$DEST/EdgeSnap.guide" "$GUIDE_IN" >/dev/null
+# the defaults printed in the guide are the classic lane's: see COMMON
+# in Makefile.m68k
+GUIDE_CFLAGS="-DES_CONFIG_ANIMATE_DEFAULT=0" \
+    "$ROOT/scripts/make-guide.sh" "$DEST/EdgeSnap.guide" "$GUIDE_IN" >/dev/null
 rm -f "$GUIDE_IN"
 
 cat > "$DEST/EdgeSnap.readme" <<'EOR'
@@ -83,6 +86,11 @@ fills that half or quarter of the screen.
 The behaviour lives in edgesnap.library, not in the commodity, so any
 program can ask for the same things - the commodity is a client like
 any other. esnaptest, in the package, is a worked example.
+
+A window jumps into its zone. It can glide there instead, as on the
+other systems, and that is off as installed: 68k machines differ
+widely in speed, and without a graphics card a glide can be slow. Turn
+on "Glide into place" in the preferences if yours is quick enough.
 
 This build is for the 68000 and later, on AmigaOS 2.04 or later, with
 or without a graphics card. It was tested on AmigaOS 3.2.3; 3.1 and
@@ -135,6 +143,7 @@ cat > "$DEST/EdgeSnap.prefs" <<'EOR'
 # CYCLESIZES  the same side hotkey again gives two thirds, then one
 #             third, then a half again: yes | no
 # ANIMATE     glide into the zone instead of jumping: yes | no
+#             (default no: how well it looks depends on the machine)
 
 #ZONES=all
 #EDGEPX=12

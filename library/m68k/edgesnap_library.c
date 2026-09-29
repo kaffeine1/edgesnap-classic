@@ -44,8 +44,8 @@ LONG ES_LibStart(void)
 
 #define ES_LIB_NAME     "edgesnap.library"
 #define ES_LIB_VERSION  2
-#define ES_LIB_REVISION 19
-#define ES_LIB_IDSTRING "edgesnap.library 2.19 (28.9.2026) Michele Dipace\r\n"
+#define ES_LIB_REVISION 20
+#define ES_LIB_IDSTRING "edgesnap.library 2.20 (29.9.2026) Michele Dipace\r\n"
 
 /* An argument in the register the ABI names. */
 #define ES_REG(reg, decl) decl __asm(#reg)

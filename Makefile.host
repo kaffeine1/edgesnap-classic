@@ -10,7 +10,7 @@ BUILD ?= build/host
 
 TESTS := $(BUILD)/zones_test $(BUILD)/engine_test $(BUILD)/registry_test \
          $(BUILD)/panels_test $(BUILD)/config_test $(BUILD)/gutter_test \
-         $(BUILD)/icontrol_test
+         $(BUILD)/icontrol_test $(BUILD)/config_test_classic
 
 .PHONY: all test clean
 
@@ -40,6 +40,12 @@ $(BUILD)/gutter_test: core/gutter.c core/gutter_test.c core/gutter.h core/regist
 	mkdir -p "$(BUILD)"
 	$(CC) $(CFLAGS) -o "$@" core/gutter.c core/registry.c core/gutter_test.c
 
+# The settings as the classic lane builds them: the glide off as they
+# come. Every other test of the file must hold there as well.
+$(BUILD)/config_test_classic: core/config.c core/config_test.c core/config.h core/engine.h core/panels.h core/zones.h include/edgesnap_types.h
+	mkdir -p "$(BUILD)"
+	$(CC) $(CFLAGS) -DES_CONFIG_ANIMATE_DEFAULT=0 -o "$@" core/config.c core/engine.c core/zones.c core/config_test.c
+
 $(BUILD)/icontrol_test: core/icontrol.c core/icontrol_test.c core/icontrol.h
 	mkdir -p "$(BUILD)"
 	$(CC) $(CFLAGS) -o "$@" core/icontrol.c core/icontrol_test.c
@@ -52,6 +58,7 @@ test: $(TESTS)
 	./$(BUILD)/config_test
 	./$(BUILD)/gutter_test
 	./$(BUILD)/icontrol_test
+	./$(BUILD)/config_test_classic
 
 clean:
 	rm -f $(TESTS)

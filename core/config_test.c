@@ -44,8 +44,15 @@ static void test_defaults(void)
     CHECK(c.panel_detect == 1);
     CHECK(c.panel_margin == ES_PANEL_MARGIN_PX);
     CHECK(c.preview == 1);
+    CHECK(c.cycle_sizes == 1);
+    /* 1 as the other systems build it, 0 as the classic lane does:
+     * this test is built both ways (Makefile.host) */
+    CHECK(c.animate == ES_CONFIG_ANIMATE_DEFAULT);
     CHECK(c.bypass_qual == ES_QUAL_NONE);
     CHECK(c.margin.l == 0 && c.margin.b == 0);
+    /* whatever the default, the setting says what it is told */
+    CHECK(es_config_line(&c, "ANIMATE=yes") == ES_OK && c.animate == 1);
+    CHECK(es_config_line(&c, "ANIMATE=no") == ES_OK && c.animate == 0);
 }
 
 static void test_numbers_and_bounds(void)

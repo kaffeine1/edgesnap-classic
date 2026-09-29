@@ -128,7 +128,7 @@ MorphOS hardware and on AmigaOS 4 and AROS under emulation.
 """,
      """EdgeSnap is 0.4: a beta, complete in what it does and tested on
 AmigaOS 3.2, on real hardware and under emulation.
-@{b}edgesnap.library@{ub} says 2.19, and that is not a mistake: a
+@{b}edgesnap.library@{ub} says 2.20, and that is not a mistake: a
 """),
     ("""@{b}esnaptest@{ub}, in the os4, mos and aros64 drawers of this package,
 is a small client""",

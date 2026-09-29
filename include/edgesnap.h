@@ -112,7 +112,10 @@ typedef ULONG ESTagData;
                                                  same side hotkey again
                                                  gives two thirds, then
                                                  one third (2.13)       */
-#define ES_OPT_Animate      (ES_TAGBASE + 14) /* BOOL, default TRUE: a
+#define ES_OPT_Animate      (ES_TAGBASE + 14) /* BOOL, default TRUE,
+                                                 FALSE in a library built
+                                                 for the classic systems
+                                                 (2.20 there): a
                                                  snap and a restore move
                                                  the window in a few
                                                  steps instead of one.

@@ -36,8 +36,13 @@ GEN := $(OUT)/include
 # edge. Where windows are dragged as an outline, a hand's mouse made
 # the zone come and go under a steady push; here windows are let off
 # the screen instead (the preferences and the installer see to it).
+# ES_CONFIG_ANIMATE_DEFAULT=0: the glide is off as the settings come.
+# The 68k machines differ too much in speed for one default to suit
+# them, and without a graphics card the redraws of a glide can crawl:
+# each user turns it on in the preferences for the machine they have.
 COMMON := -std=gnu89 -Wall -Wextra -O2 -m$(M68K_CPU) -fomit-frame-pointer \
-          -DES_ENGINE_PUSH_PX=0 -Icore -Iinclude -Ilibrary
+          -DES_ENGINE_PUSH_PX=0 -DES_CONFIG_ANIMATE_DEFAULT=0 \
+          -Icore -Iinclude -Ilibrary
 # The runtime is named once: with one gcc call for compiling and
 # linking, naming it in LDFLAGS as well links libnix's startup twice.
 CFLAGS ?= $(COMMON) -mcrt=nix20
