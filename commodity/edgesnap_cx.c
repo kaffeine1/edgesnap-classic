@@ -157,16 +157,49 @@ static void spike_pf_drop_now(void);    /* from the input handler */
  * window opened meanwhile appears only at the release, when the frame
  * is being taken down. The four bars of MorphOS were never seen during
  * a drag on AmigaOS 3.2.3 (2026-09-28). So the frame is drawn on the
- * screen, as AROS draws it, in its plain form: a band inverted in
- * COMPLEMENT. It needs no pixel reads, which a classic system without
- * cybergraphics could not do, it composes with Intuition's own outline,
- * and drawn a second time it is gone; the input handler takes it down
- * on the release, ahead of Intuition. On the four-colour Workbench the
- * inverse of the grey is the blue.
+ * screen, as AROS draws it, and like AROS's it must compose with the
+ * outline Intuition inverts during the drag: every change it makes is
+ * an XOR, and the input handler takes it down on the release, ahead of
+ * Intuition.
+ *
+ * The first classic frame was the plain inversion, a band in
+ * COMPLEMENT: on the grey of the Workbench the inverse is the blue,
+ * but over a window it is the inverse of the window, black on white,
+ * white on black, and on a deeper palette whatever pen the inverse
+ * falls on, orange for one (real hardware, 2026-10-01). Now the frame
+ * is the masked XOR, written straight into the screen's memory: the
+ * planes of a native screen, or the linear memory of a graphics card
+ * through cybergraphics.library (commodity/frame_bits.c). The strip is
+ * then the accent wherever it lies, and dropping it gives back exactly
+ * what was there. The writes are the processor's, inside Forbid, with
+ * nothing that waits: the outline cannot be drawn half-way through a
+ * strip. The plain inversion stays for a screen neither way reaches.
  */
 #define ES_PREVIEW_XOR 1
-/* The masked frame reads pixels; the classic one is always the plain
- * inversion (spike_pf_accent_bytes), so these are never reached. */
+#define ES_PF_DIRECT 1
+#include "frame_bits.h"
+#include <inline/macros.h>
+/* Optional: only a screen on a graphics card needs it. The toolchain
+ * has no cybergraphics headers, so the three calls and six tags used
+ * here are declared by hand, from the library's own function table. */
+struct Library *CyberGfxBase;
+#define ES_CGX_PIXFMT        0x80000004UL   /* CYBRMATTR_PIXFMT      */
+#define ES_CGX_ISCYBERGFX    0x80000008UL   /* CYBRMATTR_ISCYBERGFX  */
+#define ES_CGX_ISLINEARMEM   0x80000009UL   /* CYBRMATTR_ISLINEARMEM */
+#define ES_LBMI_PIXFMT       0x84001004UL
+#define ES_LBMI_BYTESPERPIX  0x84001005UL
+#define ES_LBMI_BYTESPERROW  0x84001006UL
+#define ES_LBMI_BASEADDRESS  0x84001007UL
+#define es_GetCyberMapAttr(bm, attr) \
+    LP2(0x60, ULONG, es_GetCyberMapAttr, struct BitMap *, (bm), a0, \
+        ULONG, (attr), d0, , CyberGfxBase)
+#define es_LockBitMapTagList(bm, tags) \
+    LP2(0xa8, APTR, es_LockBitMapTagList, struct BitMap *, (bm), a0, \
+        struct TagItem *, (tags), a1, , CyberGfxBase)
+#define es_UnLockBitMap(handle) \
+    LP1NR(0xae, es_UnLockBitMap, APTR, (handle), a0, , CyberGfxBase)
+/* The pixel-array form of the masked frame is AROS's; the classic one
+ * goes straight to memory (ES_PF_DIRECT), so these are never reached. */
 static ULONG es_pf_no_pixels(void)
 {
     return 0;
@@ -954,6 +987,19 @@ static struct PreviewFrame {
     int trust;               /* XOR: reads round-trip? -1 not probed yet */
     ESRect strip[4];
     int strips;
+#ifdef ES_PF_DIRECT
+    int direct;              /* classic: drawn straight into memory */
+    int chunky;              /* classic: ... of a graphics card */
+    UBYTE *keep;             /* classic: what each strip was, XOR the accent */
+    ULONG keep_at[4];        /* classic: where each strip's part starts */
+    ESFPlanes planes;        /* classic: the native screen's planes */
+    ULONG pixfmt;            /* classic: the card's pixel format */
+    int rawbpp;              /* classic: its bytes per pixel */
+    UBYTE raw[4];            /* classic: the accent as the card stores it */
+    int said_direct;         /* classic: the technique was logged */
+    int said_unlocked;       /* classic: a refused lock was logged */
+    volatile int unlocked;   /* classic: the handler could not lock */
+#endif
 } g_pf;
 
 #define ES_PF_BPP 4          /* PIXF_A8R8G8B8 */
@@ -993,6 +1039,12 @@ static void spike_pf_free_buffers(void)
 {
     int i;
 
+#ifdef ES_PF_DIRECT
+    if (g_pf.keep != NULL) {
+        FreeVec(g_pf.keep);
+        g_pf.keep = NULL;
+    }
+#endif
     for (i = 0; i < 4; i++) {
         if (g_pf.saved[i] != NULL) {
             FreeVec(g_pf.saved[i]);
@@ -1198,6 +1250,11 @@ static void spike_pf_check_erased(void)
     if (said || g_pf.drawn || g_pf.plain || g_pf.scr == NULL) {
         return;
     }
+#ifdef ES_PF_DIRECT
+    if (g_pf.direct) {
+        return;              /* nothing was read through pixel arrays */
+    }
+#endif
     for (i = 0; i < g_pf.strips; i++) {
         const ESRect *st = &g_pf.strip[i];
         const UBYTE *want = g_pf.saved[i];
@@ -1250,6 +1307,251 @@ static void spike_pf_hide(void)
 #endif
 }
 
+#ifdef ES_PF_DIRECT
+/*
+ * The classic frame, straight into the screen's memory (see the note
+ * where ES_PF_DIRECT is defined, and commodity/frame_bits.c).
+ *
+ * Which memory: a screen on a graphics card is known to cybergraphics,
+ * and its bitmap is locked to get the address, the row length and the
+ * pixel format; any other screen of a classic system is a standard
+ * planar bitmap whose planes are in Planes[]. The accent is the pen
+ * taken at startup: its number on a planar screen, its colour in the
+ * card's own format on a graphics card.
+ *
+ * When: the whole of a show or a drop runs inside Forbid and does not
+ * wait. On a native screen the blitter is waited for first, so that an
+ * outline Intuition has just started is complete before the planes are
+ * read; on a card the lock is taken first, which may wait, and nothing
+ * is read until it is held. A show is therefore never interleaved with
+ * Intuition drawing its outline, and every change is an XOR, so the two
+ * compose whatever the order.
+ */
+
+/* Lock a card's bitmap; 0 when it cannot be had as the show saw it. */
+static APTR spike_pf_lock(ESFChunky *out)
+{
+    struct TagItem tags[5];
+    ULONG base = 0, bpr = 0, fmt = 0, bpp = 0;
+    APTR handle;
+
+    tags[0].ti_Tag = ES_LBMI_BASEADDRESS;  tags[0].ti_Data = (ULONG)&base;
+    tags[1].ti_Tag = ES_LBMI_BYTESPERROW;  tags[1].ti_Data = (ULONG)&bpr;
+    tags[2].ti_Tag = ES_LBMI_PIXFMT;       tags[2].ti_Data = (ULONG)&fmt;
+    tags[3].ti_Tag = ES_LBMI_BYTESPERPIX;  tags[3].ti_Data = (ULONG)&bpp;
+    tags[4].ti_Tag = TAG_DONE;             tags[4].ti_Data = 0;
+    handle = es_LockBitMapTagList(g_pf.scr->RastPort.BitMap, tags);
+    if (handle == NULL) {
+        return NULL;
+    }
+    if (base == 0 || bpr == 0 || fmt != g_pf.pixfmt ||
+        (int)bpp != g_pf.rawbpp) {
+        es_UnLockBitMap(handle);
+        return NULL;
+    }
+    out->base = (unsigned char *)base;
+    out->stride = (long)bpr;
+    out->bpp = (int)bpp;
+    return handle;
+}
+
+/* Which memory this screen has; 0 when neither way reaches it. */
+static int spike_pf_direct_kind(void)
+{
+    struct BitMap *bm = g_pf.scr->RastPort.BitMap;
+    ULONG flags;
+    int depth, k;
+
+    g_pf.chunky = 0;
+    if (CyberGfxBase != NULL &&
+        es_GetCyberMapAttr(bm, ES_CGX_ISCYBERGFX) != 0) {
+        if (es_GetCyberMapAttr(bm, ES_CGX_ISLINEARMEM) == 0) {
+            return 0;
+        }
+        g_pf.pixfmt = es_GetCyberMapAttr(bm, ES_CGX_PIXFMT);
+        g_pf.rawbpp = esf_raw_colour(g_pf.pixfmt, g_pf.accent[1],
+                                     g_pf.accent[2], g_pf.accent[3],
+                                     (unsigned int)g_pf.pen, g_pf.raw);
+        if (g_pf.rawbpp == 0) {
+            return 0;
+        }
+        g_pf.chunky = 1;
+        return 1;
+    }
+    /* before V39 every bitmap is a standard planar one */
+    flags = GfxBase->LibNode.lib_Version >= 39 ?
+            GetBitMapAttr(bm, BMA_FLAGS) : BMF_STANDARD;
+    depth = bm->Depth;
+    if ((flags & BMF_STANDARD) == 0 || depth < 1 || depth > 8) {
+        return 0;
+    }
+    /* In HAM a pixel's colour leans on its neighbour's, and two planes
+     * are control bits: a band of one pen would smear sideways. */
+    if ((g_pf.scr->ViewPort.Modes & HAM) != 0) {
+        return 0;
+    }
+    for (k = 0; k < depth; k++) {
+        if (bm->Planes[k] == NULL) {
+            return 0;
+        }
+        g_pf.planes.plane[k] = (unsigned char *)bm->Planes[k];
+    }
+    g_pf.planes.stride = (long)bm->BytesPerRow;
+    g_pf.planes.depth = depth;
+    return 1;
+}
+
+static int spike_pf_direct_show(void)
+{
+    ULONG total = 0;
+    APTR handle = NULL;
+    ESFChunky card;
+    int i, ok = 0;
+
+    g_pf.direct = 0;
+    if (g_pf.trust == 0) {
+        return 0;            /* EDGESNAP_FRAME_PLAIN: the test hook */
+    }
+    if (!spike_pf_direct_kind()) {
+        return 0;
+    }
+    /* the strips inside the screen, whatever the rectangle said */
+    for (i = 0; i < g_pf.strips; i++) {
+        ESRect *st = &g_pf.strip[i];
+        int bw = g_pf.scr->Width;
+        int bh = g_pf.scr->Height;
+
+        if (st->x < 0) {
+            st->w += st->x;
+            st->x = 0;
+        }
+        if (st->y < 0) {
+            st->h += st->y;
+            st->y = 0;
+        }
+        if (st->x + st->w > bw) {
+            st->w = bw - st->x;
+        }
+        if (st->y + st->h > bh) {
+            st->h = bh - st->y;
+        }
+        g_pf.keep_at[i] = total;
+        total += g_pf.chunky ?
+                 esf_chunky_bytes(st->w, st->h, g_pf.rawbpp) :
+                 esf_planar_bytes(st->x, st->w, st->h, g_pf.planes.depth);
+    }
+    if (total == 0) {
+        return 0;
+    }
+    g_pf.keep = (UBYTE *)AllocVec(total, MEMF_ANY);
+    if (g_pf.keep == NULL) {
+        return 0;
+    }
+
+    Forbid();
+    /*
+     * The button may have come up since the engine asked for this
+     * frame: the input handler then found nothing to take down, and a
+     * frame drawn now would only be taken down by the task, after
+     * Intuition has moved the window over it. So: only while it is held.
+     */
+    if (g_shared.releases >= g_shared.presses) {
+        /* nothing: ok stays 0 */
+    } else if (g_pf.chunky) {
+        handle = spike_pf_lock(&card);
+        if (handle != NULL) {
+            for (i = 0; i < g_pf.strips; i++) {
+                ESRect *st = &g_pf.strip[i];
+
+                esf_chunky_show(&card, st->x, st->y, st->w, st->h, g_pf.raw,
+                                g_pf.keep + g_pf.keep_at[i]);
+            }
+            es_UnLockBitMap(handle);
+            ok = 1;
+        }
+    } else {
+        WaitBlit();
+        for (i = 0; i < g_pf.strips; i++) {
+            ESRect *st = &g_pf.strip[i];
+
+            esf_planar_show(&g_pf.planes, st->x, st->y, st->w, st->h,
+                            (unsigned int)g_pf.pen,
+                            g_pf.keep + g_pf.keep_at[i]);
+        }
+        ok = 1;
+    }
+    if (ok) {
+        g_pf.direct = 1;
+        g_pf.plain = 0;
+        g_pf.drawn = 1;
+    }
+    Permit();
+
+    if (!ok) {
+        FreeVec(g_pf.keep);
+        g_pf.keep = NULL;
+        return 0;
+    }
+    if (g_pf.unlocked && !g_pf.said_unlocked) {
+        g_pf.said_unlocked = 1;
+        spike_log("edgesnap: frame: the card's bitmap could not be locked "
+                  "to take a frame down\n");
+    }
+    if (!g_pf.said_direct) {
+        g_pf.said_direct = 1;
+        if (g_pf.chunky) {
+            spike_log("edgesnap: frame: drawn in the accent on a graphics "
+                      "card, pixel format %lu, %d bytes per pixel\n",
+                      (unsigned long)g_pf.pixfmt, g_pf.rawbpp);
+        } else {
+            spike_log("edgesnap: frame: drawn in the accent, pen %ld, "
+                      "%d planes\n", (long)g_pf.pen, g_pf.planes.depth);
+        }
+    }
+    return 1;
+}
+
+/*
+ * Take the direct frame down: the input handler on the release, or the
+ * engine task. Called inside spike_pf_drop_now()'s Forbid. Should the
+ * card's bitmap refuse its lock here the accent stays where it is,
+ * which the next show logs: nothing better can be done from this
+ * context.
+ */
+static void spike_pf_direct_drop(void)
+{
+    ESFChunky card;
+    APTR handle;
+    int i;
+
+    if (g_pf.keep == NULL) {
+        return;
+    }
+    if (g_pf.chunky) {
+        handle = spike_pf_lock(&card);
+        if (handle == NULL) {
+            g_pf.unlocked = 1;
+            return;
+        }
+        for (i = 0; i < g_pf.strips; i++) {
+            ESRect *st = &g_pf.strip[i];
+
+            esf_chunky_drop(&card, st->x, st->y, st->w, st->h,
+                            g_pf.keep + g_pf.keep_at[i]);
+        }
+        es_UnLockBitMap(handle);
+    } else {
+        WaitBlit();
+        for (i = 0; i < g_pf.strips; i++) {
+            ESRect *st = &g_pf.strip[i];
+
+            esf_planar_drop(&g_pf.planes, st->x, st->y, st->w, st->h,
+                            g_pf.keep + g_pf.keep_at[i]);
+        }
+    }
+}
+#endif /* ES_PF_DIRECT */
+
 #ifdef ES_PREVIEW_XOR
 /*
  * Take the XOR frame down, from whichever context asks first: the
@@ -1259,12 +1561,21 @@ static void spike_pf_hide(void)
  * input.device's task, and a task cannot be switched to while another
  * is forbidden. The flag and the drawing change together.
  */
+#ifdef ES_PF_DIRECT
+static void spike_pf_direct_drop(void);
+#endif
+
 static void spike_pf_drop_now(void)
 {
     int i;
 
     Forbid();
     if (g_pf.drawn && g_pf.scr != NULL) {
+#ifdef ES_PF_DIRECT
+        if (g_pf.direct) {
+            spike_pf_direct_drop();
+        } else
+#endif
         if (g_pf.plain) {
             spike_pf_invert();
         } else {
@@ -1373,6 +1684,11 @@ static void spike_pf_show(struct Screen *dragscr, const ESRect *r)
     spike_pf_paint();
 #else
     spike_pf_free_buffers();   /* a frame the handler took down left them */
+#ifdef ES_PF_DIRECT
+    if (spike_pf_direct_show()) {
+        return;                /* the accent, straight into memory */
+    }
+#endif
     for (i = 0; i < g_pf.strips && !g_pf.shallow; i++) {
         /* a shallow screen gets the plain inversion, which reads and
          * keeps nothing: no buffers for it */
@@ -1490,9 +1806,14 @@ static void spike_pf_show(struct Screen *dragscr, const ESRect *r)
     Permit();
     if (g_pf.plain && !g_pf.said_plain) {
         g_pf.said_plain = 1;
+#ifdef ES_PF_DIRECT
+        spike_log("edgesnap: frame: no direct access to this screen, drawn "
+                  "as a plain inversion\n");
+#else
         spike_log("edgesnap: frame: %s, drawn as a plain inversion\n",
                   g_pf.shallow ? "screen below 24 bits"
                                : "pixel reads not trusted");
+#endif
     }
 #endif
 }
@@ -3683,6 +4004,12 @@ static void spike_handle_hotkey(LONG id)
 
 static void spike_close_libs(void)
 {
+#ifdef ES_PF_DIRECT
+    if (CyberGfxBase != NULL) {
+        CloseLibrary(CyberGfxBase);
+        CyberGfxBase = NULL;
+    }
+#endif
 #ifdef ES_PF_CGX
     if (CyberGfxBase != NULL) {
         CloseLibrary(CyberGfxBase);
@@ -3726,6 +4053,11 @@ static int spike_open_libs(void)
     if (CyberGfxBase == NULL) {
         return 0;
     }
+#endif
+#ifdef ES_PF_DIRECT
+    /* optional: without it a screen on a graphics card gets the plain
+     * inversion, and a native screen needs nothing of it */
+    CyberGfxBase = OpenLibrary((CONST_STRPTR)"cybergraphics.library", 40);
 #endif
     CxBase = OpenLibrary((CONST_STRPTR)"commodities.library", 37);
     if (IntuitionBase == NULL || GfxBase == NULL || CxBase == NULL) {

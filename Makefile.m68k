@@ -58,8 +58,9 @@ LIB_CFLAGS ?= $(COMMON) -fno-builtin -fno-toplevel-reorder \
 CORE_SRC := core/zones.c core/panels.c core/engine.c core/registry.c \
             core/config.c core/gutter.c
 BODY_SRC := library/edgesnap_body.c $(CORE_SRC)
-CX_SRC := commodity/edgesnap_cx.c
-HEADERS := $(wildcard core/*.h include/*.h library/*.h)
+# frame_bits.c: the classic preview frame's pixels, host-tested
+CX_SRC := commodity/edgesnap_cx.c commodity/frame_bits.c
+HEADERS := $(wildcard core/*.h include/*.h library/*.h commodity/*.h)
 
 LIB := $(OUT)/edgesnap.library
 CX := $(OUT)/EdgeSnap
@@ -77,7 +78,7 @@ PREFS_SRC := prefs/gadtools/edgesnap_prefs.c prefs/prefs_io.c \
              prefs/icontrol_offscreen.c core/icontrol.c core/config.c \
              core/engine.c core/zones.c core/panels.c
 
-all: $(LIB) $(CX) $(CX_STATIC) $(PREFS) $(ESNAPTEST) $(KEYSEND)
+all: $(LIB) $(CX) $(CX_STATIC) $(PREFS) $(ESNAPTEST) $(KEYSEND) $(FRAMETEST)
 
 # --- the client headers, from the ABI ---------------------------------
 $(SFD): $(FD) $(CLIB)
@@ -133,8 +134,16 @@ $(KEYSEND): tools/keysend.c
 	@mkdir -p "$(dir $@)"
 	$(CC) $(KEYSEND_CFLAGS) -o "$@" tools/keysend.c -lamiga
 
+# The classic frame without a drag, for a bench that cannot see the
+# screen (tools/frametest.c): the commodity's frame_bits.c, put up and
+# taken down on the screen's own memory, checked byte by byte.
+FRAMETEST ?= build/m68k/frametest
+$(FRAMETEST): tools/frametest.c commodity/frame_bits.c commodity/frame_bits.h
+	@mkdir -p "$(dir $@)"
+	$(CC) $(KEYSEND_CFLAGS) -Icommodity -o "$@" tools/frametest.c commodity/frame_bits.c
+
 clean:
-	rm -f "$(LIB)" "$(CX)" "$(CX_STATIC)" "$(PREFS)" "$(ESNAPTEST)" "$(KEYSEND)"
+	rm -f "$(LIB)" "$(CX)" "$(CX_STATIC)" "$(PREFS)" "$(ESNAPTEST)" "$(KEYSEND)" "$(FRAMETEST)"
 	rm -rf "$(GEN)"
 
 .PHONY: all clean

@@ -10,7 +10,8 @@ BUILD ?= build/host
 
 TESTS := $(BUILD)/zones_test $(BUILD)/engine_test $(BUILD)/registry_test \
          $(BUILD)/panels_test $(BUILD)/config_test $(BUILD)/gutter_test \
-         $(BUILD)/icontrol_test $(BUILD)/config_test_classic
+         $(BUILD)/icontrol_test $(BUILD)/config_test_classic \
+         $(BUILD)/frame_bits_test
 
 .PHONY: all test clean
 
@@ -46,6 +47,12 @@ $(BUILD)/config_test_classic: core/config.c core/config_test.c core/config.h cor
 	mkdir -p "$(BUILD)"
 	$(CC) $(CFLAGS) -DES_CONFIG_ANIMATE_DEFAULT=0 -o "$@" core/config.c core/engine.c core/zones.c core/config_test.c
 
+# The preview frame's pixels (commodity/frame_bits.c): pure C, so the
+# masked XOR is held to its promises here before any screen sees it.
+$(BUILD)/frame_bits_test: commodity/frame_bits.c commodity/frame_bits_test.c commodity/frame_bits.h
+	mkdir -p "$(BUILD)"
+	$(CC) $(CFLAGS) -Icommodity -o "$@" commodity/frame_bits.c commodity/frame_bits_test.c
+
 $(BUILD)/icontrol_test: core/icontrol.c core/icontrol_test.c core/icontrol.h
 	mkdir -p "$(BUILD)"
 	$(CC) $(CFLAGS) -o "$@" core/icontrol.c core/icontrol_test.c
@@ -59,6 +66,7 @@ test: $(TESTS)
 	./$(BUILD)/gutter_test
 	./$(BUILD)/icontrol_test
 	./$(BUILD)/config_test_classic
+	./$(BUILD)/frame_bits_test
 
 clean:
 	rm -f $(TESTS)
