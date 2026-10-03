@@ -8,7 +8,7 @@
 
 (set #app "EdgeSnap")
 
-(set #app-version "0.4 beta")
+(set #app-version "0.41 beta")
 
 ; Short enough for the first window of AmigaOS 4's Installer: with
 ; the old paragraph the text ran under the buttons that choose the
@@ -282,6 +282,24 @@
 
 (complete 70)
 
+; --- windows that may go past the edge (MorphOS, first installation) --
+;
+; MorphOS as delivered keeps a dragged window on the screen: dragged
+; against an edge it stops there and holds the pointer back where it
+; has the title bar, so the pointer never reaches the edge, and a drag
+; snaps only by pushing on against it. The setting that lets windows go
+; on is MorphOS's own, in IControl: "allow positioning beyond the screen
+; limits". The first installation chooses it, and MorphOS takes it up at
+; once, no restart. An update leaves it alone: whoever chose otherwise
+; meant it. EdgeSnap's preferences program does the work, and has the
+; box. AmigaOS 4 and AROS let windows go past the edge as delivered.
+(set #offscreen 0)
+(if (= #system 1)
+    (if (= #update 0)
+        (if (= (run "SYS:Prefs/EdgeSnap >NIL: OFFSCREEN QUERY" (safe)) 5)
+            (if (= (run "SYS:Prefs/EdgeSnap >NIL: OFFSCREEN ON") 0)
+                (set #offscreen 1)))))
+
 ; --- windows that can move off-screen (classic, first installation) --
 ;
 ; AmigaOS 3.2 as installed keeps windows on the screen: one dragged
@@ -294,7 +312,6 @@
 ; resetting the Workbench screen appears in the middle of installing.
 ; An update leaves it alone: whoever turned it back meant it.
 ; EdgeSnap's preferences program does the work, and has the box.
-(set #offscreen 0)
 (if (= #system 3)
     (if (= #update 0)
         (if (= (run "SYS:Prefs/EdgeSnap >NIL: OFFSCREEN QUERY BOOTONLY" (safe)) 5)
@@ -451,22 +468,32 @@
 
 ; What was changed outside EdgeSnap is said on a page of its own, to
 ; every user level: nobody should find a system setting different and
-; not know who did it, or how to have it back. And the first thing on
-; it is what the user has to do: the setting waits for a restart, and
-; until then the one thing EdgeSnap is installed for, dragging a window
-; to an edge, does nothing. Someone who misses that concludes that
-; EdgeSnap does not work.
+; not know who did it, or how to have it back. On the classic systems
+; the first thing on it is what the user has to do: the setting waits
+; for a restart, and until then the one thing EdgeSnap is installed
+; for, dragging a window to an edge, does nothing. Someone who misses
+; that concludes that EdgeSnap does not work.
 (if (= #offscreen 1)
     (message
-      (cat "PLEASE RESTART THE SYSTEM when this installation is over.\n\n"
-           "Until then the hotkeys work, and dragging a window to an "
-           "edge does not snap it.\n\n"
-           "AmigaOS stops a dragged window at the edge, before the "
-           "pointer gets there. EdgeSnap has turned on the setting of "
-           "AmigaOS that lets windows move off-screen, and AmigaOS "
-           "takes it up when it starts.\n\n"
-           "To undo it: SYS:Prefs/EdgeSnap, the box "
-           "\"Windows can move off-screen\".")
+      (if (= #system 3)
+          (cat "PLEASE RESTART THE SYSTEM when this installation is over.\n\n"
+               "Until then the hotkeys work, and dragging a window to an "
+               "edge does not snap it.\n\n"
+               "AmigaOS stops a dragged window at the edge, before the "
+               "pointer gets there. EdgeSnap has turned on the setting of "
+               "AmigaOS that lets windows move off-screen, and AmigaOS "
+               "takes it up when it starts.\n\n"
+               "To undo it: SYS:Prefs/EdgeSnap, the box "
+               "\"Windows can move off-screen\".")
+          (cat "One setting of MorphOS was changed.\n\n"
+               "Windows can now be dragged past the edge of the screen "
+               "(IControl: positioning beyond the screen limits). Without "
+               "that, a window dragged to an edge stops there and holds the "
+               "pointer back, and a drag hardly ever snaps. It works at once; "
+               "IControl's key, Control as delivered, still keeps a window on "
+               "the screen while held.\n\n"
+               "To have it as it was: SYS:Prefs/EdgeSnap, the box "
+               "\"Windows can move off-screen\", or IControl."))
       (all)))
 
 ; (quiet): our own closing text says what happened - the Installer's
@@ -481,7 +508,7 @@
                    "    (started by Workbench at every boot)\n"
                    "    one line in S:User-Startup\n"))
            "    " (tackon #guide-dest "EdgeSnap.guide") "\n\n"
-           (if (= #offscreen 1)
+           (if (and (= #offscreen 1) (= #system 3))
                "NOW RESTART THE SYSTEM: dragging needs it, once.\n"
                "The drawer you ran this from can be deleted.\n")
            (if (= #old-preview 1)

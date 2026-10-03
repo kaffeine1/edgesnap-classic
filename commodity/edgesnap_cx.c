@@ -3434,11 +3434,20 @@ static void spike_push_config(void)
 {
     struct TagItem tags[16];
     int n = 0;
+    int corner_div = g_cfg.engine.corner_div;
 
+    /*
+     * 0 and 1, the corner itself, are 2.19's. An older library in
+     * LIBS: refuses them, and every other tag of the call with them,
+     * so it gets the band it had as its default.
+     */
+    if (corner_div < 2 && ES_LIB_REV < 19) {
+        corner_div = 4;
+    }
     tags[n].ti_Tag = ES_OPT_EdgePx;
     tags[n++].ti_Data = (ULONG)g_cfg.engine.edge_px;
     tags[n].ti_Tag = ES_OPT_CornerDiv;
-    tags[n++].ti_Data = (ULONG)g_cfg.engine.corner_div;
+    tags[n++].ti_Data = (ULONG)corner_div;
     tags[n].ti_Tag = ES_OPT_DragMinPx;
     tags[n++].ti_Data = (ULONG)g_cfg.engine.drag_min_px;
     tags[n].ti_Tag = ES_OPT_Zones;
@@ -3473,12 +3482,6 @@ static void spike_push_config(void)
     }
 }
 
-/*
- * Preferences changed under us. dos.library tells us the file was
- * written; who wrote it does not matter - the preferences window, an
- * editor, or a script - so there is nothing to co-ordinate with and no
- * protocol to get wrong.
- */
 /* "corner 1/4" for a band, "corner only" for the corner itself. */
 static const char *spike_corner_words(void)
 {
@@ -3491,6 +3494,12 @@ static const char *spike_corner_words(void)
     return buf;
 }
 
+/*
+ * Preferences changed under us. dos.library tells us the file was
+ * written; who wrote it does not matter - the preferences window, an
+ * editor, or a script - so there is nothing to co-ordinate with and no
+ * protocol to get wrong.
+ */
 static void spike_config_reload(void)
 {
     spike_config_load(g_argc, g_argv);

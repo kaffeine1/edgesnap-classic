@@ -15,6 +15,20 @@
  * nothing - the three buttons every Amiga preferences program has. The
  * running EdgeSnap watches ENV: and reconfigures itself, so there is
  * no protocol between this program and the commodity at all.
+ *
+ * One row is not EdgeSnap's: "Windows can move off-screen" is the
+ * system's own setting, the one IControl offers, kept in IControl's
+ * file (prefs/offscreen_sys.c). It is here because a drag only snaps
+ * where the pointer can reach the edge, and with that setting off a
+ * dragged window stops at the edge and holds the pointer back. It sits
+ * in a section named after the system, so that nobody takes it for one
+ * of ours, and the system takes it up at once.
+ *
+ * From a Shell, and from the installer:
+ *   EdgeSnapPrefs OFFSCREEN QUERY|ON|OFF
+ * asks or sets that one thing without opening the window. QUERY
+ * returns 0 for on and 5 for off; every form returns 10 when the
+ * system's file is not one this program understands.
  */
 
 #include <exec/types.h>
@@ -31,6 +45,7 @@
 
 #include "config.h"
 #include "prefs_io.h"
+#include "offscreen_sys.h"
 #include "edgesnap_version.h"
 #include "edgesnap.h"
 
@@ -69,6 +84,9 @@ struct ESPrefsGui {
     ESConfig cfg;
     Object *app;
     Object *win;
+    Object *offscreen;      /* the system's setting, not ours        */
+    int off_was;            /* as the window found it: 1, 0, or -1   */
+                            /* for a file this program cannot read   */
     Object *field[ES_MAX_SETTINGS];
     Object *zone[ES_ZONE_COUNT];
     /* MUI keeps the pointer we hand it, it does not copy the text, so
@@ -400,6 +418,54 @@ static Object *es_settings_group(struct ESPrefsGui *gui)
     return MUI_NewObjectA(MUIC_Group, tags);
 }
 
+/*
+ * The system's own setting, in a section of its own named after the
+ * system. A file this program cannot read leaves the box greyed out
+ * rather than guessing what the system would make of a rewritten one.
+ */
+static Object *es_offscreen_group(struct ESPrefsGui *gui)
+{
+    static char label[] = "Windows can move off-screen:";
+    /* As bubble help, not as text in the window: two more lines made
+     * the window 735 pixels tall, on AROS One's 768. */
+    static char help[] =
+        "The system's own setting, the same one IControl has.\n"
+        "Without it a dragged window stops at the edge of the screen,\n"
+        "and holds the pointer back with it.";
+    Object *check = MUI_MakeObject(MUIO_Checkmark, NULL);
+    Object *body;
+    Object *title;
+
+    gui->offscreen = check;
+    if (check == NULL) {
+        return MUI_NewObject(MUIC_Rectangle, TAG_DONE);
+    }
+    set(check, MUIA_Selected, gui->off_was == 1 ? TRUE : FALSE);
+    set(check, MUIA_CycleChain, 1);
+    set(check, MUIA_ShortHelp, (ESTagData)help);
+    if (gui->off_was < 0) {
+        set(check, MUIA_Disabled, TRUE);
+    }
+    body = MUI_NewObject(MUIC_Group,
+                         MUIA_Frame, MUIV_Frame_Group,
+                         MUIA_Background, MUII_GroupBack,
+                         MUIA_Group_Columns, 2,
+                         MUIA_Group_Child, (ESTagData)Label1(label),
+                         MUIA_Group_Child, (ESTagData)es_left_aligned(check),
+                         TAG_DONE);
+    title = MUI_NewObject(MUIC_Text,
+                          MUIA_Text_Contents, (ESTagData)eso_system(),
+                          MUIA_Text_PreParse, (ESTagData)"\33b",
+                          TAG_DONE);
+    if (body == NULL || title == NULL) {
+        return body != NULL ? body : MUI_NewObject(MUIC_Rectangle, TAG_DONE);
+    }
+    return MUI_NewObject(MUIC_Group,
+                         MUIA_Group_Child, (ESTagData)title,
+                         MUIA_Group_Child, (ESTagData)body,
+                         TAG_DONE);
+}
+
 /* ------------------------------------------------ back to the file */
 
 static void es_collect(struct ESPrefsGui *gui)
@@ -457,9 +523,41 @@ static void es_collect(struct ESPrefsGui *gui)
     }
 }
 
+/* MUI_RequestA takes plain char * on MorphOS and CONST_STRPTR on AROS. */
+#ifdef __AROS__
+#define ES_REQ_TEXT(s) ((CONST_STRPTR)(s))
+#else
+#define ES_REQ_TEXT(s) ((char *)(s))
+#endif
+
+/*
+ * The system's setting as the box shows it: Use for this session, Save
+ * for the next start too, even when only an earlier Use had changed it.
+ * The system takes it up at once, and a file that already says so is
+ * not written at all.
+ */
+static void es_store_offscreen(struct ESPrefsGui *gui, int permanent)
+{
+    ULONG on = 0;
+
+    if (gui->offscreen == NULL || gui->off_was < 0) {
+        return;
+    }
+    get(gui->offscreen, MUIA_Selected, &on);
+    if (!eso_set(on ? 1 : 0, 1, permanent)) {
+        MUI_RequestA(gui->app, gui->win, 0,
+                     ES_REQ_TEXT("EdgeSnap Preferences"),
+                     ES_REQ_TEXT("_OK"),
+                     ES_REQ_TEXT("\33c\"Windows can move off-screen\" could "
+                                 "not be written:\nthe system's "
+                                 "preferences file refused it."),
+                     NULL);
+    }
+}
+
 /* ------------------------------------------------------------ main */
 
-int main(void)
+int main(int argc, char **argv)
 {
     struct ESPrefsGui gui;
     Object *save;
@@ -471,8 +569,16 @@ int main(void)
     int i;
 
     (void)es_version_cookie;
+    if (eso_is_command(argc, argv)) {
+        return eso_command(argc, argv);
+    }
     for (i = 0; i < ES_MAX_SETTINGS; i++) {
         gui.field[i] = NULL;
+    }
+    gui.offscreen = NULL;
+    gui.off_was = eso_query(0);
+    if (gui.off_was >= 0 && eso_query(1) < 0) {
+        gui.off_was = -1;      /* one of the two files is not ours to read */
     }
     for (i = 0; i < ES_ZONE_COUNT; i++) {
         gui.zone[i] = NULL;
@@ -487,8 +593,11 @@ int main(void)
 #endif
     MUIMasterBase = OpenLibrary(MUIMASTER_NAME, MUIMASTER_VMIN);
     if (MUIMasterBase == NULL) {
-        Printf("EdgeSnapPrefs: muimaster.library %ld is needed\n",
+        Printf((CONST_STRPTR)"EdgeSnapPrefs: muimaster.library %ld is needed\n",
                (LONG)MUIMASTER_VMIN);
+#ifdef __AROS__
+        CloseLibrary((struct Library *)IntuitionBase);
+#endif
         return RETURN_FAIL;
     }
 
@@ -508,6 +617,7 @@ int main(void)
             MUIA_Window_ID, MAKE_ID('E', 'S', 'P', 'R'),
             WindowContents, VGroup,
                 Child, es_settings_group(&gui),
+                Child, es_offscreen_group(&gui),
                 Child, HGroup,
                     MUIA_Group_SameWidth, TRUE,
                     Child, save,
@@ -519,11 +629,8 @@ int main(void)
     End;
 
     if (gui.app == NULL) {
-        Printf("EdgeSnapPrefs: the window would not build\n");
+        Printf((CONST_STRPTR)"EdgeSnapPrefs: the window would not build\n");
         CloseLibrary(MUIMasterBase);
-#ifdef __AROS__
-    CloseLibrary((struct Library *)IntuitionBase);
-#endif
 #ifdef __AROS__
         CloseLibrary((struct Library *)IntuitionBase);
 #endif
@@ -548,12 +655,14 @@ int main(void)
         if (id == ES_ID_SAVE) {
             es_collect(&gui);
             esp_store(&gui.cfg, 1);
+            es_store_offscreen(&gui, 1);
             rc = RETURN_OK;
             break;
         }
         if (id == ES_ID_USE) {
             es_collect(&gui);
             esp_store(&gui.cfg, 0);
+            es_store_offscreen(&gui, 0);
             rc = RETURN_OK;
             break;
         }
@@ -576,5 +685,8 @@ int main(void)
     set(gui.win, MUIA_Window_Open, FALSE);
     MUI_DisposeObject(gui.app);
     CloseLibrary(MUIMasterBase);
+#ifdef __AROS__
+    CloseLibrary((struct Library *)IntuitionBase);
+#endif
     return rc;
 }

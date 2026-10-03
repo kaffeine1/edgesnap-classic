@@ -158,6 +158,25 @@ interfaces). Heuristic instead:
   configurable). Usable area = screen minus `BarHeight` minus dock/panel
   strips minus per-side configurable margins (there is no work-area API
   on Amiga systems).
+- Corners and the top edge (library 2.19, 2026-09-28): a corner is the
+  corner itself, not a band along the side edge. Until then a quarter
+  of the usable height at each end of a side edge counted as corner,
+  so half of every side edge was corner, and a window dragged sideways
+  by a title bar in the upper part of the screen, which is how most
+  windows are dragged, landed in a quarter when a half was meant. The
+  screen's edges stop the pointer, so the corner itself is the easiest
+  target there is: throw the pointer into it. The same reasoning moves
+  the top edge to the screen's own title bar: a window whose title bar
+  sits at the top of the usable area is grabbed within the edge
+  distance of it, and was in the maximize zone the moment it moved.
+  `CORNERDIV` 2 to 16 still gives the bands, and with them a top edge
+  that reaches the edge distance into the screen; 0 and 1 are the
+  corner itself, and 0 is the default. An older library refuses 0 and
+  1 along with every other setting of the call, so the commodity sends
+  it the old 4 instead. Where a window may not leave the screen
+  (MorphOS as delivered) the corner is reached by the push of library
+  2.7 (below), and a bottom corner needs it on both axes at once: that
+  is the case to watch on real hardware.
 - Dock awareness (macOS-style, added 2026-08-26, field-tuned on real
   MorphOS the same day): edge strips reserved by panel-like windows are
   auto-subtracted from the usable area. Detection is split per the
@@ -846,6 +865,49 @@ is flush with as being on that edge, after `push_px` (24) of it. A
 frontend that never calls FeedMotion gets the 2.6 behaviour; the guide
 still names the switch for whoever prefers it.
 
+**The system's own setting, from EdgeSnap's preferences (0.41,
+2026-10-01).** The push answers, but a window that may go past the edge
+answers better: the zones need two pushes at once for a bottom corner,
+and on real hardware a push can flicker. So the preferences program on
+all three systems now shows the system's setting, in a section named
+after the system so that nobody takes it for one of ours, and writes
+it where the system keeps it, that one bit and nothing else of the
+user's file (`core/offscreen.c`, host-tested against files the systems
+wrote; `prefs/offscreen_sys.c` around it):
+
+- MorphOS: `ENV:Sys/icontrol.conf`, a text file whose first line is
+  `Flags=0x...`; IControl's "allow positioning beyond the screen
+  limits" is 0x4000. Not in the SDK: read off two files a user saved
+  with the choice either way, one digit apart. MorphOS does not install
+  the file; a machine where IControl was never saved runs on built-in
+  defaults, and gets what 3.20's IControl writes from them (captured in
+  the VM by moving the file aside and saving). MorphOS watches the
+  file: written from outside, it takes effect at once (window dragged
+  to the left edge: stopped at 0 with the bit clear, went on to -210
+  with it set, no restart).
+- AROS: `ENV:SYS/icontrol.prefs`, IFF with an ICTL chunk;
+  `ICF_OFFSCREENLAYERS` is bit 28 of `ic_Flags` (bit 15 there is 3D
+  menus). The chunk is `sizeof(struct IControlPrefs)`, 36 bytes on
+  x86_64 where the structure is padded, and the editor loads no other
+  size. On as delivered; also taken up at once.
+- AmigaOS 4: `ENV:Sys/gui.prefs`, the GUI editor's file: one "GUI "
+  chunk with struct GUIPrefs (7484 bytes on 4.1 Final Edition) and the
+  IControl chunk AmigaOS 4 keeps in the same file; off-screen dragging
+  is `GF_SCREENOFFSDRAGGING`, 0x20 of `gp_ScreenFlags`. On as
+  delivered, but a user of the first releases had it off and could not
+  use EdgeSnap until they found it (that was before the push). IPrefs
+  applies the file when it is written. The SDK says that only IPrefs
+  may set GUI attributes globally, so EdgeSnap writes the file and
+  never calls SetGUIAttrs; a machine without the file is not written
+  for, since it holds the system's whole look. Every GUI chunk gets the
+  bit, so that no screen keeps the other answer.
+
+Changing the user's preference from the commodity is still not done.
+What changed is who asks: the box in the preferences window, at the
+user's hand, and the first installation on MorphOS, which chooses it
+once and says so on a page of its own. An update never touches it:
+whoever turned it back meant it. The push stays for whoever does.
+
 **Where 0.3 stands (2026-09-06).** The prepared release includes the
 AROS x86_64 ABIv11 lane, library API 2.6 on all three systems, the
 window-size and drag-press fixes, Wanderer repaint handling and the
@@ -1023,6 +1085,20 @@ need anything else.
 What follows in that list (work areas, groups, divider tokens, client
 roles) is the section below, designed in the issue with a real client
 on the other side.
+
+Item 9, gaps and margins per group, came as revision 2.20
+(2026-10-02). `ESnap_SetGroupOptionsA` keeps an inner gap and four
+outer margins with the group, and `ES_PF_CELL` asks `PlaceWindow` and
+`PlaceWindowsA` to take them off a cell: a side at the edge of the
+usable area gives up the margin there, a side shared with another cell
+half the gap, the odd pixel going to the right or bottom side. So the
+tiler computes cells that tile the area exactly, and the room between
+them is the library's to keep the same everywhere; a window's size
+limits are fitted against the area less the margins, so one that has
+to grow still keeps to its margin. The arithmetic is `es_cell_rect` in
+`core/zones.c`, host-tested; esnaptest places its own window in a half
+cell and finds it where it should be, on all three systems. Item 6,
+divider tokens per group, waits for the tiler that would use them.
 
 ### Before the ABI freeze
 

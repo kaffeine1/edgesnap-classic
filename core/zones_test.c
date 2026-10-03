@@ -48,12 +48,6 @@ static void test_zone_from_pointer(void)
     CHECK(es_zone_from_pointer(&u, 320, 478, 12, 100) == ES_ZONE_NONE);
 }
 
-/*
- * Corners of no length, the default since 2026-09-28: along a side
- * edge a corner is only at or beyond the usable area's top or bottom.
- * A title bar just under the screen's own bar is a half, the screen
- * bar itself is the corner.
- */
 /* The top edge with a band of its own: 0 is the screen's bar. */
 static void test_zone_top_band(void)
 {
@@ -72,6 +66,12 @@ static void test_zone_top_band(void)
     CHECK(es_zone_from_pointer_top(&u, 0, 12, 12, 0, 0) == ES_ZONE_TOP_LEFT);
 }
 
+/*
+ * Corners of no length, the default since 2026-09-28: along a side
+ * edge a corner is only at or beyond the usable area's top or bottom.
+ * A title bar just under the screen's own bar is a half, the screen
+ * bar itself is the corner.
+ */
 static void test_zone_corner_only(void)
 {
     ESRect u;
@@ -94,6 +94,49 @@ static void test_zone_corner_only(void)
     CHECK(es_zone_from_pointer(&u, 13, 0, 12, 0) == ES_ZONE_MAX);
     CHECK(es_zone_from_pointer(&u, 626, 0, 12, 0) == ES_ZONE_MAX);
     CHECK(es_zone_from_pointer(&u, 627, 0, 12, 0) == ES_ZONE_TOP_RIGHT);
+}
+
+/* 2.20: a tiler's cells made into window boxes. */
+static void test_cell_rect(void)
+{
+    static const int margin[4] = { 20, 10, 30, 40 };
+    static const int none[4] = { 0, 0, 0, 0 };
+    ESRect u, c, b, a;
+
+    u.x = 0; u.y = 33; u.w = 1920; u.h = 959;
+
+    /* the whole area: every side on the edge, the margins */
+    es_cell_rect(&u, &u, 10, margin, &b, &a);
+    CHECK(b.x == 20 && b.y == 43 && b.w == 1870 && b.h == 909);
+    CHECK(a.x == 20 && a.y == 43 && a.w == 1870 && a.h == 909);
+
+    /* two halves side by side, an odd gap of 11: 5 on the left of the
+     * seam, 6 on the right, 11 between them */
+    c.x = 0; c.y = 33; c.w = 960; c.h = 959;
+    es_cell_rect(&c, &u, 11, margin, &b, 0);
+    CHECK(b.x == 20 && b.w == 960 - 20 - 6);
+    {
+        ESRect l = b;
+
+        c.x = 960;
+        es_cell_rect(&c, &u, 11, margin, &b, 0);
+        CHECK(b.x == 965 && b.x + b.w == 1920 - 30);
+        CHECK(b.x - (l.x + l.w) == 11);
+    }
+
+    /* a cell in the middle: half the gap all round */
+    c.x = 640; c.y = 353; c.w = 640; c.h = 320;
+    es_cell_rect(&c, &u, 10, margin, &b, 0);
+    CHECK(b.x == 645 && b.y == 358 && b.w == 630 && b.h == 310);
+
+    /* no gaps, no margins: the cell itself */
+    es_cell_rect(&c, &u, 0, none, &b, 0);
+    CHECK(b.x == c.x && b.y == c.y && b.w == c.w && b.h == c.h);
+
+    /* a cell beyond the edge counts as on it; one too small keeps a pixel */
+    c.x = -5; c.y = 33; c.w = 10; c.h = 10;
+    es_cell_rect(&c, &u, 10, margin, &b, 0);
+    CHECK(b.x == 15 && b.w == 1);
 }
 
 static void test_zone_rect_tiles(void)
@@ -315,6 +358,7 @@ int main(void)
     test_zone_corner_only();
     test_zone_top_band();
     test_zone_rect_tiles();
+    test_cell_rect();
     test_fit_zone_rect();
 
     if (g_failures == 0) {

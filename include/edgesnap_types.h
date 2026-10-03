@@ -95,22 +95,40 @@
  *       the nearest seam, covered in places or not.
  *   2.17 - the first box of a glide is waited for longer, so the first
  *       snap after MorphOS has started glides too.
- *   2.18 - ES_OPT_CornerDiv takes 0 and 1, the corner only where the
+ *   2.18 - the classic systems only (AmigaOS 3.x on the 68k, which
+ *       numbered 2.18 to 2.20 their own way: see 2.21). ES_OPT_CornerDiv
+ *       takes 0 and 1, the corner only where the pointer is pushed into
+ *       it, and 0 is the default. And a window dragged as an outline
+ *       and pushed against an edge snaps: the push looks at the
+ *       outline, not at the window that stays put until the release.
+ *       (The push was withdrawn in their 2.19.)
+ *   2.19 - ES_OPT_CornerDiv takes 0 and 1, the corner only where the
  *       pointer is pushed into it, and 0 is the default: a quarter of
  *       the height at each end made half of every side edge a corner.
- *       And a window dragged as an outline and pushed against an edge
- *       snaps: the push looks at the outline, not at the window that
- *       stays put until the release. (Withdrawn in 2.19.)
- *   2.19 - the classic systems only. No push at all there: under a
- *       real hand the zone came and went and the frame flickered; the
- *       windows are let off the screen instead, an AmigaOS setting the
- *       installer and the preferences look after. With corners of no
- *       length the top edge is the screen's title bar, so a window
- *       that sits at the top is not in the maximize zone when touched.
- *   2.20 - the classic systems only. The glide is off as the settings
- *       come: 68k machines differ too much in speed for one default,
- *       and without a graphics card a glide can crawl. ES_OPT_Animate
- *       and the ANIMATE setting turn it on as before.
+ *       With corners of no length the top edge is the screen's title
+ *       bar, so a window that sits at the top is not in the maximize
+ *       zone when it is dragged. An older library refuses 0 and 1,
+ *       and every other tag of the same call with them: a client
+ *       checks the revision before it sends them.
+ *       On the classic systems 2.19 was their own: no push at all
+ *       there, since under a real hand the zone came and went and the
+ *       frame flickered; the windows are let off the screen instead,
+ *       an AmigaOS setting the installer and the preferences look
+ *       after.
+ *   2.20 - gaps and margins per group: SetGroupOptionsA appended, and
+ *       ES_PF_CELL for PlaceWindow and PlaceWindowsA, which takes them
+ *       off a cell of the group's layout (item 9 of the tiler's list in
+ *       issue 2). An older library refuses the flag with BAD_ARGS.
+ *       On the classic systems 2.20 was their own, WITHOUT
+ *       SetGroupOptionsA: the glide off as the settings come, because
+ *       68k machines differ too much in speed for one default and
+ *       without a graphics card a glide can crawl. ES_OPT_Animate and
+ *       the ANIMATE setting turn it on as before.
+ *   2.21 - the classic systems only: the other systems' 2.20, with the
+ *       classic choices kept (no push, the glide off as the settings
+ *       come). A classic client checks for 2.21 before it calls
+ *       SetGroupOptionsA: their 2.20 did not have it, and refuses
+ *       ES_PF_CELL.
  */
 #define ES_API_VERSION       2
 /* A client that uses a vector appended after 2.2 must check that the

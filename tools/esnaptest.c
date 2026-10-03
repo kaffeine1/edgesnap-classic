@@ -62,6 +62,12 @@ struct IntuitionBase *IntuitionBase;
 struct Library *EdgeSnapBase;
 #define ES_CALL(fn) fn
 struct IntuitionBase *IntuitionBase;
+/* SetGroupOptionsA is their 2.21: the classic systems' own 2.20 was
+ * something else and does not have it (edgesnap_types.h). */
+#define ES_REV_GROUP_OPTIONS 21
+#endif
+#ifndef ES_REV_GROUP_OPTIONS
+#define ES_REV_GROUP_OPTIONS 20
 #endif
 
 static const char *rcname(LONG rc)
@@ -416,6 +422,46 @@ int main(int argc, char **argv)
                rcname(rc));
         Delay(50L);
         ES_CALL(ESnap_UnsnapWindow)(win);
+        /* 2.20: gaps and margins of the group, taken off a cell. */
+        if (EdgeSnapBase->lib_Revision >= ES_REV_GROUP_OPTIONS) {
+            struct TagItem go[3];
+            struct ESnapArea ua;
+            struct ESnapRect cell;
+
+            go[0].ti_Tag = ES_GO_Gap;
+            go[0].ti_Data = 10;
+            go[1].ti_Tag = ES_GO_Margin;
+            go[1].ti_Data = 20;
+            go[2].ti_Tag = TAG_DONE;
+            go[2].ti_Data = 0;
+            rc = ES_CALL(ESnap_SetGroupOptionsA)(grp, go);
+            printf("esnaptest: ESnap_SetGroupOptionsA(gap 10, margin 20) -> "
+                   "%s\n", rcname(rc));
+            rc = ES_CALL(ESnap_SetGroupOptionsA)(grp + 1000, go);
+            printf("esnaptest: options of a group that is not there -> %s "
+                   "(expected ES_ERR_STALE)\n", rcname(rc));
+            go[0].ti_Data = 999;
+            go[1].ti_Tag = TAG_DONE;
+            rc = ES_CALL(ESnap_SetGroupOptionsA)(grp, go);
+            printf("esnaptest: a gap of 999 -> %s (expected ES_ERR_BAD_ARGS)\n",
+                   rcname(rc));
+            if (ES_CALL(ESnap_QueryScreenArea)(win->WScreen, &ua) == ES_OK) {
+                /* the left half of the usable area as a cell: the margin
+                 * on three sides, half the gap (5) on the seam side */
+                cell = ua.usable;
+                cell.w = ua.usable.w / 2;
+                rc = ES_CALL(ESnap_PlaceWindow)(win, &cell, ES_PF_CELL);
+                Delay(50L);
+                printf("esnaptest: ESnap_PlaceWindow(left half as a cell) -> "
+                       "%s, window %d,%d %dx%d (expected %ld,%ld %ldx%ld, "
+                       "its size limits allowing)\n", rcname(rc),
+                       win->LeftEdge, win->TopEdge, win->Width, win->Height,
+                       (long)(ua.usable.x + 20), (long)(ua.usable.y + 20),
+                       (long)(cell.w - 20 - 5), (long)(ua.usable.h - 40));
+                ES_CALL(ESnap_UnsnapWindow)(win);
+                Delay(25L);
+            }
+        }
         rc = ES_CALL(ESnap_CreateGroup)(0, "second", 0, &grp2);
         rc = ES_CALL(ESnap_GroupAddWindow)(grp2, win);
         printf("esnaptest: the same window into a second group -> %s "

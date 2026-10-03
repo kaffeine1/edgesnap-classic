@@ -44,8 +44,8 @@ LONG ES_LibStart(void)
 
 #define ES_LIB_NAME     "edgesnap.library"
 #define ES_LIB_VERSION  2
-#define ES_LIB_REVISION 20
-#define ES_LIB_IDSTRING "edgesnap.library 2.20 (29.9.2026) Michele Dipace\r\n"
+#define ES_LIB_REVISION 21
+#define ES_LIB_IDSTRING "edgesnap.library 2.21 (3.10.2026) Michele Dipace\r\n"
 
 /* An argument in the register the ABI names. */
 #define ES_REG(reg, decl) decl __asm(#reg)
@@ -384,6 +384,13 @@ static LONG G_QueryGroupOf(ES_REG(a0, struct Window *win),
     return esb_query_group_of(win, group_out);
 }
 
+/* --- appended for 2.20 (2.21 here): gaps and margins per group --- */
+static LONG G_SetGroupOptionsA(ES_REG(d0, ULONG group),
+                               ES_REG(a0, const struct TagItem *tags))
+{
+    return esb_set_group_options(group, tags);
+}
+
 /* Vector order is the ABI. Append only, never reorder, never remove. */
 static const APTR FuncTable[] = {
     (APTR)LibOpen,
@@ -420,6 +427,7 @@ static const APTR FuncTable[] = {
     (APTR)G_GroupAddWindow,
     (APTR)G_GroupRemoveWindow,
     (APTR)G_QueryGroupOf,
+    (APTR)G_SetGroupOptionsA,
     (APTR)-1
 };
 

@@ -65,7 +65,7 @@ Short:        Tile windows by dragging them to an edge
 Author:       michele.dipace@kaffeine.net (Michele Dipace)
 Uploader:     michele.dipace@kaffeine.net (Michele Dipace)
 Type:         util/cdity
-Version:      0.4 (beta)
+Version:      0.41 (beta)
 Architecture: m68k-amigaos >= 2.0.4
 License:      MIT
 
@@ -112,6 +112,11 @@ preferences, which AmigaOS takes up when it starts: without it a
 dragged window stops at the edge and never snaps. Until the restart the
 hotkeys work and dragging does not. The installer says so, and
 EdgeSnap's preferences turn the setting back.
+
+A corner is now the corner itself. If you saved EdgeSnap's preferences
+with an earlier version, they may keep the corner size they had then,
+4, a band along each side: set Corner size to 0 in SYS:Prefs/EdgeSnap
+for the corners as they come now.
 
 The icons are by Carlo Spadoni, who drew them for EdgeSnap.
 

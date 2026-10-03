@@ -11,7 +11,7 @@ BUILD ?= build/host
 TESTS := $(BUILD)/zones_test $(BUILD)/engine_test $(BUILD)/registry_test \
          $(BUILD)/panels_test $(BUILD)/config_test $(BUILD)/gutter_test \
          $(BUILD)/icontrol_test $(BUILD)/config_test_classic \
-         $(BUILD)/frame_bits_test
+         $(BUILD)/frame_bits_test $(BUILD)/offscreen_test
 
 .PHONY: all test clean
 
@@ -57,6 +57,10 @@ $(BUILD)/icontrol_test: core/icontrol.c core/icontrol_test.c core/icontrol.h
 	mkdir -p "$(BUILD)"
 	$(CC) $(CFLAGS) -o "$@" core/icontrol.c core/icontrol_test.c
 
+$(BUILD)/offscreen_test: core/offscreen.c core/offscreen_test.c core/offscreen.h
+	mkdir -p "$(BUILD)"
+	$(CC) $(CFLAGS) -o "$@" core/offscreen.c core/offscreen_test.c
+
 test: $(TESTS)
 	./$(BUILD)/zones_test
 	./$(BUILD)/engine_test
@@ -67,6 +71,7 @@ test: $(TESTS)
 	./$(BUILD)/icontrol_test
 	./$(BUILD)/config_test_classic
 	./$(BUILD)/frame_bits_test
+	./$(BUILD)/offscreen_test
 
 clean:
 	rm -f $(TESTS)

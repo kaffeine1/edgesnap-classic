@@ -54,32 +54,28 @@ On AROS delete the library and the two files in SYS:WBStartup.
 and the two in SYS:Prefs.
 """),
 
-    # the corners
-    ("""corner, then release. The zones are: left and right edges for halves,
-the four corners for quarters, the top edge to maximise.
-""",
-     """corner, then release. The zones are: left and right edges for halves,
-the four corners for quarters, the top edge to maximise.
-
-A corner is the corner itself. Anywhere along a side edge gives the
-half, even with the title bar right under the screen's own; for a
-quarter, push the pointer on into the corner, where the screen stops
-it. The top edge is the screen's own title bar, for the same reason: a
-window that sits at the top is not maximised the moment it is touched.
-If you would rather have longer corners, and a top edge that reaches
-into the screen, the Corner size setting gives them back.
-"""),
-
     # windows that stop at the edge
     ("""@{b}Windows that may not leave the screen@{ub}
-On MorphOS the IControl preferences decide whether a window may be
-dragged past the edge of the screen. As delivered they say no, except
-while Control is held, and a window that stops at the edge keeps the
-pointer where it grabbed the title bar: the pointer never touches the
-edge, so nothing snaps. Either hold Control while you drag, or open
-@{b}SYS:Prefs/IControl@{ub} and allow positioning beyond the screen
-limits. AROS has the same switch in its IControl preferences, on by
-default; AmigaOS 4 lets a window leave the screen without asking.
+A drag snaps where the pointer reaches the edge. Whether a dragged
+window may go on past the edge is the system's own setting: in IControl
+on MorphOS and AROS, in the GUI preferences on AmigaOS 4 (off-screen
+dragging). Where it may not, the window stops at the edge and holds
+the pointer back where it has the title bar; EdgeSnap then counts
+pushing on against the edge as being there, but the zones answer
+better when the window can go on.
+
+MorphOS as delivered keeps windows on the screen, so the first
+installation there chooses IControl's "allow positioning beyond the
+screen limits", says so on a page of its own, and MorphOS takes it up
+at once. An update leaves the setting as it finds it. AROS and
+AmigaOS 4 let a window go past the edge as delivered, unless someone
+turned it off.
+
+To change it either way, use the box @{b}Windows can move off-screen@{ub}
+in EdgeSnap's preferences, in the section named after the system, or
+the system's own editor: IControl, or GUI on AmigaOS 4. On MorphOS,
+IControl's key, Control as delivered, turns the setting round while it
+is held.
 """,
      """@{b}Windows that may not leave the screen@{ub}
 AmigaOS 3.2 as installed keeps windows on the screen: one dragged
@@ -99,6 +95,19 @@ EdgeSnap's own preferences have it too, as
 Changing it makes AmigaOS ask to reset the Workbench screen, naming the
 windows to close first. Close them and press Retry, or press Cancel and
 let it take effect at the next start.
+"""),
+
+    # the preferences window: on AmigaOS the setting waits
+    ("""nothing you can choose there can be refused. It also has the
+system's own "Windows can move off-screen", in a section named after
+the system (see above): it is kept in the system's preferences, not in
+EdgeSnap's, and the system follows it at once.
+""",
+     """nothing you can choose there can be refused. It also has the
+system's own "Windows can move off-screen", in the section named
+AmigaOS (see above): it is kept in the system's preferences, not in
+EdgeSnap's, and AmigaOS takes it up when it resets the Workbench
+screen or starts again.
 """),
 
     # the seam
@@ -122,13 +131,13 @@ expected. Stop the copy Workbench started first, with
 """),
 
     # for programmers
-    ("""EdgeSnap is 0.4: a beta, complete in what it does and tested on real
+    ("""EdgeSnap is 0.41: a beta, complete in what it does and tested on real
 MorphOS hardware and on AmigaOS 4 and AROS under emulation.
-@{b}edgesnap.library@{ub} says 2.17, and that is not a mistake: a
-""",
-     """EdgeSnap is 0.4: a beta, complete in what it does and tested on
-AmigaOS 3.2, on real hardware and under emulation.
 @{b}edgesnap.library@{ub} says 2.20, and that is not a mistake: a
+""",
+     """EdgeSnap is 0.41: a beta, complete in what it does and tested on
+AmigaOS 3.2, on real hardware and under emulation.
+@{b}edgesnap.library@{ub} says 2.21, and that is not a mistake: a
 """),
     ("""@{b}esnaptest@{ub}, in the os4, mos and aros64 drawers of this package,
 is a small client""",

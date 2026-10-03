@@ -48,5 +48,6 @@ LONG ESnap_DeleteGroup(ULONG group);
 LONG ESnap_GroupAddWindow(ULONG group, struct Window *win);
 LONG ESnap_GroupRemoveWindow(ULONG group, struct Window *win);
 LONG ESnap_QueryGroupOf(struct Window *win, ULONG *group_out);
+LONG ESnap_SetGroupOptionsA(ULONG group, const struct TagItem *tags);
 
 #endif /* CLIB_EDGESNAP_PROTOS_H */

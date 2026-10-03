@@ -93,7 +93,7 @@ Short:        Tile windows by dragging them to an edge
 Author:       michele.dipace@kaffeine.net (Michele Dipace)
 Uploader:     michele.dipace@kaffeine.net (Michele Dipace)
 Type:         util/cdity
-Version:      0.4 (beta)
+Version:      0.41 (beta)
 Architecture: ppc-amigaos >= 4.0.0; ppc-morphos; x86_64-aros
 License:      MIT
 
@@ -124,6 +124,17 @@ including one line in S:User-Startup (on AROS the commodity goes into
 SYS:WBStartup instead), so snapping is simply there from the next boot.
 Updating is installing again: no reboot needed.
 
+A corner is now the corner itself. If you saved EdgeSnap's preferences
+with an earlier version, they keep the corner size they had, 4, a band
+along each side: set Corner size to 0 in SYS:Prefs/EdgeSnap for the
+corners as they come now.
+
+A window that may not go past the edge of the screen keeps the pointer
+from reaching it. The preferences show the system's own setting for
+that, "Windows can move off-screen", on all three systems; on MorphOS,
+where it is off as delivered, the first installation turns it on and
+says so.
+
 The icons are by Carlo Spadoni, who drew them for EdgeSnap.
 
 Full documentation is in EdgeSnap.guide.
@@ -141,7 +152,8 @@ cat > "$DEST/EdgeSnap.prefs" <<'EOF'
 # ZONES       which zones react: all | none | halves | corners |
 #             left,right,topleft,topright,bottomleft,bottomright,maximize
 # EDGEPX      how close to an edge the POINTER must be (default 12)
-# CORNERDIV   corner length = usable height / this (default 4)
+# CORNERDIV   0: a corner only where the pointer is pushed into it
+#             (default); 2..16: a band, usable height / this
 # DRAGMINPX   pointer travel before a drag counts (default 4)
 # PREVIEW     show the zone preview frame: yes | no
 # PANELDETECT reserve dock/panel strips: yes | no
