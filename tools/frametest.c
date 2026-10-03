@@ -138,6 +138,22 @@ static int describe(int verbose)
     return 1;
 }
 
+/* The bytes of a planar strip, plane by plane and row by row, in the
+ * order esf_planar_show() keeps them: to compare before and after. */
+static void planar_copy(int x, int y, int w, int h, unsigned char *out)
+{
+    long first = (long)x >> 3, last = (long)(x + w - 1) >> 3;
+    int k, row;
+
+    for (k = 0; k < planes.depth; k++) {
+        for (row = 0; row < h; row++) {
+            memcpy(out, planes.plane[k] + (long)(y + row) * planes.stride + first,
+                   (size_t)(last - first + 1));
+            out += last - first + 1;
+        }
+    }
+}
+
 static unsigned int planar_pen(int x, int y)
 {
     unsigned int v = 0;
@@ -260,6 +276,9 @@ int main(int argc, char **argv)
         }
         for (i = 0; i < n; i++) {
             /* a copy of what is there, to compare after the drop */
+            if (!chunky) {
+                planar_copy(st[i].x, st[i].y, st[i].w, st[i].h, before + at[i]);
+            }
             for (yy = 0; yy < st[i].h; yy++) {
                 if (chunky) {
                     memcpy(before + at[i] + (unsigned long)yy * st[i].w * rawbpp,
@@ -321,6 +340,24 @@ int main(int argc, char **argv)
                                 keep + at[i]);
             }
         }
+        if (!chunky) {
+            /* same layout as the keep, so the same offsets */
+            unsigned char *now = (unsigned char *)AllocVec(total, MEMF_ANY);
+
+            if (now != NULL) {
+                unsigned long b;
+
+                for (i = 0; i < n; i++) {
+                    planar_copy(st[i].x, st[i].y, st[i].w, st[i].h, now + at[i]);
+                }
+                for (b = 0; b < total; b++) {
+                    if (now[b] != before[b]) {
+                        bad_back++;
+                    }
+                }
+                FreeVec(now);
+            }
+        }
         if (chunky && handle != NULL) {
             for (i = 0; i < n; i++) {
                 for (yy = 0; yy < st[i].h; yy++) {
@@ -335,10 +372,10 @@ int main(int argc, char **argv)
             ft_UnLockBitMap(handle);
         }
         Permit();
-        printf("frame %d,%d %dx%d, strips %d px: %d pixel bytes not the "
-               "accent while up, %d rows not as before after the drop%s\n",
-               x, y, w, h, t, bad_up, bad_back,
-               chunky ? "" : " (planar: compared through the pens only while up)");
+        printf("frame %d,%d %dx%d, strips %d px: %d %s not the accent "
+               "while up, %d %s not as before after the drop\n",
+               x, y, w, h, t, bad_up, chunky ? "pixel bytes" : "pixels",
+               bad_back, chunky ? "rows" : "plane bytes");
         if (bad_up || bad_back) {
             rc = 5;
         }
