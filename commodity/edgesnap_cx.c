@@ -352,6 +352,14 @@ struct SpikeShared {
     volatile ULONG diag_calls;
     volatile ULONG diag_class[16];
     volatile ULONG releases;
+    /*
+     * The left button is down, as far as we saw: set by a press, cleared
+     * by a release. Not presses > releases: a commodity ahead of us may
+     * keep a press for itself and let its release through (a click on a
+     * start bar, 2026-10-05), and from then on the counts never agree
+     * again while the button is held.
+     */
+    volatile ULONG held;
     volatile ULONG moves;
     volatile ULONG quals;   /* latest qualifier bits seen with the mouse */
     /* the windowless seam (AROS): the task says when the pointer is on
@@ -434,6 +442,7 @@ static void spike_cx_action(CxMsg *msg, CxObj *obj)
             g_shared.seam_grabs++;
         }
 #endif
+        g_shared.held = 1;
         g_shared.presses++;
     } else if (ie->ie_Code == (IECODE_LBUTTON | IECODE_UP_PREFIX)) {
 #ifdef ES_SEAM_NO_WINDOW
@@ -450,6 +459,7 @@ static void spike_cx_action(CxMsg *msg, CxObj *obj)
          */
         spike_pf_drop_now();
 #endif
+        g_shared.held = 0;
         g_shared.releases++;
     } else if (ie->ie_Code == IECODE_NOBUTTON) {
         /* a relative device reports how far the mouse went, whether
@@ -497,6 +507,18 @@ static struct EmulLibEntry spike_cx_trap = {
  * commodity's face is Exchange, not a shell.
  */
 static int g_quit_mode;   /* QUIT argument: stop a running instance */
+
+/*
+ * CX_PRIORITY, the word every commodity takes from its tooltypes or its
+ * command line: where in the chain of commodities this one hears an
+ * input event. The chain runs from the highest priority down, and a
+ * commodity ahead of us may keep an event for itself: on an AmiKit
+ * system (2026-10-05) one of sixteen took every press of the left
+ * button and let the releases through, so EdgeSnap never saw a drag
+ * begin. It belongs to the commodity, not to the engine, so it is not
+ * a line of the preferences file.
+ */
+static LONG g_cx_pri = 0;
 
 /*
  * How QUIT reaches the instance that is already running. Commodities
@@ -624,9 +646,59 @@ static ESConfig g_cfg;
 static int g_argc;
 static char **g_argv;
 
+/* CX_PRIORITY=n, any case: taken here, never handed to the engine's
+ * parser. Returns 1 when the line was ours. */
+static int spike_cx_word(const char *line)
+{
+    static const char word[] = "CX_PRIORITY=";
+    const char *s = line;
+    LONG v = 0;
+    int neg = 0, digits = 0, i;
+
+    for (i = 0; word[i] != '\0'; i++) {
+        char c = line[i];
+
+        if (c >= 'a' && c <= 'z') {
+            c = (char)(c - 'a' + 'A');
+        }
+        if (c != word[i]) {
+            return 0;
+        }
+    }
+    s = line + i;
+    if (*s == '-' || *s == '+') {
+        neg = (*s == '-');
+        s++;
+    }
+    while (*s >= '0' && *s <= '9' && digits < 4) {
+        v = v * 10 + (*s - '0');
+        s++;
+        digits++;
+    }
+    if (digits == 0) {
+        spike_out("edgesnap: bad value: %s\n", line);
+        return 1;
+    }
+    if (neg) {
+        v = -v;
+    }
+    if (v > 127) {
+        v = 127;
+    } else if (v < -128) {
+        v = -128;
+    }
+    g_cx_pri = v;
+    return 1;
+}
+
 static void spike_config_line(const char *line, const char *src)
 {
-    int rc = es_config_line(&g_cfg, line);
+    int rc;
+
+    if (spike_cx_word(line)) {
+        return;
+    }
+    rc = es_config_line(&g_cfg, line);
 
     if (rc == ES_ERR_UNSUPPORTED) {
         spike_out("edgesnap: %s: unknown setting: %s\n", src, line);
@@ -1455,7 +1527,7 @@ static int spike_pf_direct_show(void)
      * frame drawn now would only be taken down by the task, after
      * Intuition has moved the window over it. So: only while it is held.
      */
-    if (g_shared.releases >= g_shared.presses) {
+    if (!g_shared.held) {
         /* nothing: ok stays 0 */
     } else if (g_pf.chunky) {
         handle = spike_pf_lock(&card);
@@ -4140,7 +4212,7 @@ int main(int argc, char **argv)
     nb.nb_Title = (STRPTR)"EdgeSnap " ES_VERSION " by Michele Dipace";
     nb.nb_Descr = (STRPTR)"Drag windows to screen edges to tile them";
     nb.nb_Unique = NBU_UNIQUE | NBU_NOTIFY;
-    nb.nb_Pri = 0;
+    nb.nb_Pri = (BYTE)g_cx_pri;
     nb.nb_Port = port;
 
     if (g_quit_mode) {
@@ -4273,6 +4345,9 @@ int main(int argc, char **argv)
            g_cfg.cycle_sizes ? "on" : "off",
            g_cfg.animate ? "on" : "off");
     spike_out("edgesnap:        (file: " ES_PREFS_ENV ")\n");
+    if (g_cx_pri != 0) {
+        spike_out("edgesnap: commodity priority %ld\n", (long)g_cx_pri);
+    }
     spike_dump_windows();
 
     port_mask = 1UL << port->mp_SigBit;

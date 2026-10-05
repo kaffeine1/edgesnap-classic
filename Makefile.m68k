@@ -78,7 +78,8 @@ PREFS_SRC := prefs/gadtools/edgesnap_prefs.c prefs/prefs_io.c \
              prefs/icontrol_offscreen.c core/icontrol.c core/config.c \
              core/engine.c core/zones.c core/panels.c
 
-all: $(LIB) $(CX) $(CX_STATIC) $(PREFS) $(ESNAPTEST) $(KEYSEND) $(FRAMETEST)
+all: $(LIB) $(CX) $(CX_STATIC) $(PREFS) $(ESNAPTEST) $(KEYSEND) $(FRAMETEST) \
+     $(CXLIST)
 
 # --- the client headers, from the ABI ---------------------------------
 $(SFD): $(FD) $(CLIB)
@@ -142,8 +143,15 @@ $(FRAMETEST): tools/frametest.c commodity/frame_bits.c commodity/frame_bits.h
 	@mkdir -p "$(dir $@)"
 	$(CC) $(KEYSEND_CFLAGS) -Icommodity -o "$@" tools/frametest.c commodity/frame_bits.c
 
+# The commodities in the order they hear input (tools/cxlist.c): who
+# sits ahead of EdgeSnap and may keep a mouse press for itself.
+CXLIST ?= build/m68k/cxlist
+$(CXLIST): tools/cxlist.c
+	@mkdir -p "$(dir $@)"
+	$(CC) $(KEYSEND_CFLAGS) -o "$@" tools/cxlist.c
+
 clean:
-	rm -f "$(LIB)" "$(CX)" "$(CX_STATIC)" "$(PREFS)" "$(ESNAPTEST)" "$(KEYSEND)" "$(FRAMETEST)"
+	rm -f "$(LIB)" "$(CX)" "$(CX_STATIC)" "$(PREFS)" "$(ESNAPTEST)" "$(KEYSEND)" "$(FRAMETEST)" "$(CXLIST)"
 	rm -rf "$(GEN)"
 
 .PHONY: all clean
