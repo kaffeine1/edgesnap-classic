@@ -334,10 +334,15 @@ static void test_glide_declines_when_it_should(void)
     to.x = 110;
     CHECK(es_glide_steps(&from, &to) == 0);
 
-    /* a window too large to redraw eight times */
+    /* a window too large to redraw eight times; where there is no
+     * limit (the classic systems) the same trip glides */
     from.x = 0; from.y = 0; from.w = 1900; from.h = 1000;
     to.x = 0; to.y = 0; to.w = 950; to.h = 1000;
+#if ES_GLIDE_MAX_AREA > 0
     CHECK(es_glide_steps(&from, &to) == 0);
+#else
+    CHECK(es_glide_steps(&from, &to) >= 3);
+#endif
 
     /* the long trip of an ordinary window earns the most steps, and
      * still few: every one of them costs the application a redraw */

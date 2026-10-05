@@ -178,6 +178,7 @@ static void spike_pf_drop_now(void);    /* from the input handler */
 #define ES_PREVIEW_XOR 1
 #define ES_PF_DIRECT 1
 #include "frame_bits.h"
+#include "mcp_config.h"
 #include <inline/macros.h>
 /* Optional: only a screen on a graphics card needs it. The toolchain
  * has no cybergraphics headers, so the three calls and six tags used
@@ -520,6 +521,10 @@ static int g_quit_mode;   /* QUIT argument: stop a running instance */
  */
 static LONG g_cx_pri = 0;
 
+/* KEEPMCP=YES: leave MCP's own window moving as it is (see
+ * spike_mcp_borrow, the classic systems). Also the commodity's word. */
+static int g_keep_mcp;
+
 /*
  * How QUIT reaches the instance that is already running. Commodities
  * only get told THAT another instance tried to start (CXCMD_UNIQUE),
@@ -646,14 +651,10 @@ static ESConfig g_cfg;
 static int g_argc;
 static char **g_argv;
 
-/* CX_PRIORITY=n, any case: taken here, never handed to the engine's
- * parser. Returns 1 when the line was ours. */
-static int spike_cx_word(const char *line)
+/* What follows 'word' at the start of 'line', in any case, or NULL. */
+static const char *spike_word_after(const char *line, const char *word)
 {
-    static const char word[] = "CX_PRIORITY=";
-    const char *s = line;
-    LONG v = 0;
-    int neg = 0, digits = 0, i;
+    int i;
 
     for (i = 0; word[i] != '\0'; i++) {
         char c = line[i];
@@ -662,10 +663,34 @@ static int spike_cx_word(const char *line)
             c = (char)(c - 'a' + 'A');
         }
         if (c != word[i]) {
-            return 0;
+            return NULL;
         }
     }
-    s = line + i;
+    return line + i;
+}
+
+/* The commodity's own words, CX_PRIORITY=n and KEEPMCP=YES|NO, in any
+ * case: taken here, never handed to the engine's parser. Returns 1
+ * when the line was ours. */
+static int spike_cx_word(const char *line)
+{
+    const char *s;
+    LONG v = 0;
+    int neg = 0, digits = 0;
+
+    if ((s = spike_word_after(line, "KEEPMCP=")) != NULL) {
+        if (spike_word_after(s, "YES") != NULL) {
+            g_keep_mcp = 1;
+        } else if (spike_word_after(s, "NO") != NULL) {
+            g_keep_mcp = 0;
+        } else {
+            spike_out("edgesnap: bad value: %s\n", line);
+        }
+        return 1;
+    }
+    if ((s = spike_word_after(line, "CX_PRIORITY=")) == NULL) {
+        return 0;
+    }
     if (*s == '-' || *s == '+') {
         neg = (*s == '-');
         s++;
@@ -840,6 +865,134 @@ static void spike_config_load(int argc, char **argv)
         spike_config_line(argv[i], "argument");
     }
 }
+
+#ifdef ES_CLASSIC
+/* -------------------------------------------- MCP's own window moving */
+
+/*
+ * MCP, the patch collection AmiKit starts with, can move and size the
+ * windows itself, in real time ("Finestre piene: sposta" and
+ * "ridimensiona" in its preferences, MOVEWINDOW and SIZEWINDOW in its
+ * configuration). It then keeps every press on a title bar for itself:
+ * Intuition never begins its own drag, the moving window paints over
+ * the preview frame, and the seam is never pressed (AmiKit for the
+ * PiStorm, 2026-10-05). MCP watches ENV:MCP2/MCP.config and takes up a
+ * change at once, so while EdgeSnap runs the two lines are turned off
+ * there, and back on when it stops. In ENV: only: ENVARC: stays as the
+ * user saved it, and a system where the two are one file is left
+ * alone. KEEPMCP=YES, a tooltype or an argument, leaves MCP be.
+ */
+#define ES_MCP_ENV    "ENV:MCP2/MCP.config"
+#define ES_MCP_ENVARC "ENVARC:MCP2/MCP.config"
+#define ES_MCP_MAX    65536L
+
+static int g_mcp_borrowed;   /* ESM_MOVEWINDOW | ESM_SIZEWINDOW */
+
+/* ENV: and ENVARC: are one file: ENV: is then not ours to touch */
+static int spike_mcp_env_is_archive(void)
+{
+    BPTR a = Lock((STRPTR)ES_MCP_ENV, ACCESS_READ);
+    BPTR b = Lock((STRPTR)ES_MCP_ENVARC, ACCESS_READ);
+    int same = (a && b && SameLock(a, b) == LOCK_SAME);
+
+    if (a) {
+        UnLock(a);
+    }
+    if (b) {
+        UnLock(b);
+    }
+    return same;
+}
+
+/* The whole file in one go; on a short write the old text goes back */
+static int spike_mcp_write(const char *text, LONG len, const char *old,
+                           LONG old_len)
+{
+    BPTR fh = Open((STRPTR)ES_MCP_ENV, MODE_NEWFILE);
+    LONG put;
+
+    if (!fh) {
+        return 0;
+    }
+    put = Write(fh, (APTR)text, len);
+    if (put != len) {
+        Seek(fh, 0L, OFFSET_BEGINNING);
+        SetFileSize(fh, 0L, OFFSET_BEGINNING);
+        Write(fh, (APTR)old, old_len);
+    }
+    Close(fh);
+    return put == len;
+}
+
+/*
+ * Turn the lines named by 'which' off (off != 0) or back on, through
+ * mcp_config.c, and write the file back. Returns the lines it turned:
+ * 0 when there was nothing to do, or when the file was not MCP's as we
+ * know it, which is then left exactly as it was.
+ */
+static int spike_mcp_turn(int which, int off)
+{
+    BPTR fh;
+    char *buf, *old;
+    LONG len, old_len;
+    long n;
+    int done;
+
+    if (spike_mcp_env_is_archive()) {
+        return 0;
+    }
+    fh = Open((STRPTR)ES_MCP_ENV, MODE_OLDFILE);
+    if (!fh) {
+        return 0;                       /* no MCP, or never configured */
+    }
+    buf = (char *)AllocVec(2 * (ES_MCP_MAX + ESM_SLACK + 1), MEMF_ANY);
+    if (buf == NULL) {
+        Close(fh);
+        return 0;
+    }
+    old = buf + ES_MCP_MAX + ESM_SLACK + 1;
+    len = Read(fh, (APTR)buf, ES_MCP_MAX);
+    Close(fh);
+    if (len <= 0 || len >= ES_MCP_MAX || !esm_is_config(buf, (long)len)) {
+        FreeVec(buf);
+        return 0;
+    }
+    memcpy(old, buf, (size_t)len);
+    old_len = len;
+    buf[len] = '\0';
+    n = (long)len;
+    done = esm_turn(buf, &n, which, off);
+    if (done && !spike_mcp_write(buf, (LONG)n, old, old_len)) {
+        done = 0;
+    }
+    FreeVec(buf);
+    return done;
+}
+
+static void spike_mcp_borrow(void)
+{
+    if (g_keep_mcp) {
+        return;
+    }
+    g_mcp_borrowed = spike_mcp_turn(ESM_BOTH, 1);
+    if (g_mcp_borrowed) {
+        spike_out("edgesnap: MCP was moving windows itself (%s%s%s): "
+                  "off in " ES_MCP_ENV " while EdgeSnap runs, "
+                  "KEEPMCP=YES leaves it\n",
+                  (g_mcp_borrowed & ESM_MOVEWINDOW) ? "MOVEWINDOW" : "",
+                  g_mcp_borrowed == ESM_BOTH ? " " : "",
+                  (g_mcp_borrowed & ESM_SIZEWINDOW) ? "SIZEWINDOW" : "");
+    }
+}
+
+static void spike_mcp_return(void)
+{
+    if (g_mcp_borrowed) {
+        spike_mcp_turn(g_mcp_borrowed, 0);
+        g_mcp_borrowed = 0;
+    }
+}
+#endif /* ES_CLASSIC */
 
 /* ------------------------------------------- library-side declarations */
 
@@ -4298,6 +4451,9 @@ int main(int argc, char **argv)
     }
     spike_push_config();
     spike_publish_ignored();
+#ifdef ES_CLASSIC
+    spike_mcp_borrow();
+#endif
 
     /* The accent colour, before any drag can ask for one. */
     if (!spike_accent_init()) {
@@ -4466,6 +4622,9 @@ out:
     spike_divider_close();
     spike_accent_free();
     spike_close_edgesnap();
+#ifdef ES_CLASSIC
+    spike_mcp_return();
+#endif
     if (port != NULL) {
         CxMsg *msg;
         while ((msg = (CxMsg *)GetMsg(port)) != NULL) {

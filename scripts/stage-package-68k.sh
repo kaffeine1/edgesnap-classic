@@ -118,6 +118,11 @@ with an earlier version, they may keep the corner size they had then,
 4, a band along each side: set Corner size to 0 in SYS:Prefs/EdgeSnap
 for the corners as they come now.
 
+On AmiKit, MCP can move windows itself, whole, and then a dragged
+window never snaps. While EdgeSnap runs it turns that off, for this
+session only: MCP's saved preferences are not changed. The guide says
+how to keep MCP's way instead.
+
 The icons are by Carlo Spadoni, who drew them for EdgeSnap.
 
 Full documentation is in EdgeSnap.guide.

@@ -141,7 +141,12 @@ void es_order_by_growth(const long *delta, int n, int *order);
  * the end, which reads as "placed" rather than "dropped".
  */
 #define ES_GLIDE_MIN_PX   48   /* below this, a jump is honest       */
-#define ES_GLIDE_MAX_AREA (1280 * 800)  /* above this, redraw wins   */
+/* Above this area redraw wins and the window jumps. 0 is no limit:
+ * the classic systems, where the glide is off as the settings come and
+ * whoever turns it on has judged the machine (Makefile.m68k). */
+#ifndef ES_GLIDE_MAX_AREA
+#define ES_GLIDE_MAX_AREA (1280 * 800)
+#endif
 
 int es_glide_steps(const ESRect *from, const ESRect *to);
 void es_glide_rect(const ESRect *from, const ESRect *to, int step,

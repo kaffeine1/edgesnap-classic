@@ -40,8 +40,13 @@ GEN := $(OUT)/include
 # The 68k machines differ too much in speed for one default to suit
 # them, and without a graphics card the redraws of a glide can crawl:
 # each user turns it on in the preferences for the machine they have.
+# ES_GLIDE_MAX_AREA=0: and once on, it glides whatever the size of the
+# window. Elsewhere a window above 1280x800 jumps, to spare it the
+# redraws; here that choice is the user's, made with the setting (on
+# AmiKit for the PiStorm, at 1920x1080, half the snaps were jumping).
 COMMON := -std=gnu89 -Wall -Wextra -O2 -m$(M68K_CPU) -fomit-frame-pointer \
           -DES_ENGINE_PUSH_PX=0 -DES_CONFIG_ANIMATE_DEFAULT=0 \
+          -DES_GLIDE_MAX_AREA=0 \
           -Icore -Iinclude -Ilibrary
 # The runtime is named once: with one gcc call for compiling and
 # linking, naming it in LDFLAGS as well links libnix's startup twice.
@@ -58,8 +63,9 @@ LIB_CFLAGS ?= $(COMMON) -fno-builtin -fno-toplevel-reorder \
 CORE_SRC := core/zones.c core/panels.c core/engine.c core/registry.c \
             core/config.c core/gutter.c
 BODY_SRC := library/edgesnap_body.c $(CORE_SRC)
-# frame_bits.c: the classic preview frame's pixels, host-tested
-CX_SRC := commodity/edgesnap_cx.c commodity/frame_bits.c
+# frame_bits.c: the classic preview frame's pixels, host-tested;
+# mcp_config.c: the two lines of MCP's configuration it borrows, too
+CX_SRC := commodity/edgesnap_cx.c commodity/frame_bits.c commodity/mcp_config.c
 HEADERS := $(wildcard core/*.h include/*.h library/*.h commodity/*.h)
 
 LIB := $(OUT)/edgesnap.library

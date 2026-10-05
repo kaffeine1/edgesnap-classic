@@ -95,6 +95,19 @@ EdgeSnap's own preferences have it too, as
 Changing it makes AmigaOS ask to reset the Workbench screen, naming the
 windows to close first. Close them and press Retry, or press Cancel and
 let it take effect at the next start.
+
+@{b}MCP and windows that move whole@{ub}
+MCP, part of AmiKit, can move and size windows itself, contents and
+all: "Finestre piene: sposta" and "ridimensiona" in its preferences. It
+then keeps every press on a title bar for itself, and EdgeSnap never
+sees a drag begin. So while EdgeSnap runs it turns those two off, in
+ENV: only, and back on when it stops: MCP's saved preferences stay as
+they are. The tooltype @{b}KEEPMCP=YES@{ub} leaves MCP alone; a window
+that MCP moves is then not snapped when it reaches an edge.
+
+@{b}CX_PRIORITY@{ub}, the tooltype every commodity takes, sets where
+EdgeSnap hears the mouse among the other commodities: 0 as it comes.
+Raise it if another commodity keeps the mouse button for itself.
 """),
 
     # the preferences window: on AmigaOS the setting waits
@@ -137,7 +150,7 @@ MorphOS hardware and on AmigaOS 4 and AROS under emulation.
 """,
      """EdgeSnap is 0.41: a beta, complete in what it does and tested on
 AmigaOS 3.2, on real hardware and under emulation.
-@{b}edgesnap.library@{ub} says 2.21, and that is not a mistake: a
+@{b}edgesnap.library@{ub} says 2.22, and that is not a mistake: a
 """),
     ("""@{b}esnaptest@{ub}, in the os4, mos and aros64 drawers of this package,
 is a small client""",

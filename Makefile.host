@@ -11,7 +11,9 @@ BUILD ?= build/host
 TESTS := $(BUILD)/zones_test $(BUILD)/engine_test $(BUILD)/registry_test \
          $(BUILD)/panels_test $(BUILD)/config_test $(BUILD)/gutter_test \
          $(BUILD)/icontrol_test $(BUILD)/config_test_classic \
-         $(BUILD)/frame_bits_test $(BUILD)/offscreen_test
+         $(BUILD)/zones_test_classic \
+         $(BUILD)/frame_bits_test $(BUILD)/offscreen_test \
+         $(BUILD)/mcp_config_test
 
 .PHONY: all test clean
 
@@ -20,6 +22,11 @@ all: $(TESTS)
 $(BUILD)/zones_test: core/zones.c core/zones_test.c core/zones.h include/edgesnap_types.h
 	mkdir -p "$(BUILD)"
 	$(CC) $(CFLAGS) -o "$@" core/zones.c core/zones_test.c
+
+# The zones as the classic lane builds them: a glide whatever the size.
+$(BUILD)/zones_test_classic: core/zones.c core/zones_test.c core/zones.h include/edgesnap_types.h
+	mkdir -p "$(BUILD)"
+	$(CC) $(CFLAGS) -DES_GLIDE_MAX_AREA=0 -o "$@" core/zones.c core/zones_test.c
 
 $(BUILD)/engine_test: core/zones.c core/engine.c core/engine_test.c core/zones.h core/engine.h include/edgesnap_types.h
 	mkdir -p "$(BUILD)"
@@ -53,6 +60,12 @@ $(BUILD)/frame_bits_test: commodity/frame_bits.c commodity/frame_bits_test.c com
 	mkdir -p "$(BUILD)"
 	$(CC) $(CFLAGS) -Icommodity -o "$@" commodity/frame_bits.c commodity/frame_bits_test.c
 
+# MCP's two lines (commodity/mcp_config.c): the text EdgeSnap writes into
+# ENV: on AmiKit, held to every byte here first.
+$(BUILD)/mcp_config_test: commodity/mcp_config.c commodity/mcp_config_test.c commodity/mcp_config.h
+	mkdir -p "$(BUILD)"
+	$(CC) $(CFLAGS) -Icommodity -o "$@" commodity/mcp_config.c commodity/mcp_config_test.c
+
 $(BUILD)/icontrol_test: core/icontrol.c core/icontrol_test.c core/icontrol.h
 	mkdir -p "$(BUILD)"
 	$(CC) $(CFLAGS) -o "$@" core/icontrol.c core/icontrol_test.c
@@ -70,8 +83,10 @@ test: $(TESTS)
 	./$(BUILD)/gutter_test
 	./$(BUILD)/icontrol_test
 	./$(BUILD)/config_test_classic
+	./$(BUILD)/zones_test_classic
 	./$(BUILD)/frame_bits_test
 	./$(BUILD)/offscreen_test
+	./$(BUILD)/mcp_config_test
 
 clean:
 	rm -f $(TESTS)

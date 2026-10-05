@@ -194,7 +194,7 @@ int es_glide_steps(const ESRect *from, const ESRect *to)
     if ((long)from->w * from->h > area) {
         area = (long)from->w * from->h;
     }
-    if (area > (long)ES_GLIDE_MAX_AREA) {
+    if (ES_GLIDE_MAX_AREA > 0 && area > (long)ES_GLIDE_MAX_AREA) {
         return 0;
     }
     /* Long trips earn a box more, but few in all: on the first real
