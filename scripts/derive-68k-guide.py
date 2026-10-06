@@ -60,9 +60,11 @@ A drag snaps where the pointer reaches the edge. Whether a dragged
 window may go on past the edge is the system's own setting: in IControl
 on MorphOS and AROS, in the GUI preferences on AmigaOS 4 (off-screen
 dragging). Where it may not, the window stops at the edge and holds
-the pointer back where it has the title bar; EdgeSnap then counts
-pushing on against the edge as being there, but the zones answer
-better when the window can go on.
+the pointer back where it has the title bar. Push the mouse on a little
+further against the edge and EdgeSnap counts the pointer as being
+there: the frame comes up and stays while you hold. For a corner, push
+on into both edges, towards the corner. The zones still answer more
+directly when the window can go on.
 
 MorphOS as delivered keeps windows on the screen, so the first
 installation there chooses IControl's "allow positioning beyond the
@@ -146,11 +148,11 @@ expected. Stop the copy Workbench started first, with
     # for programmers
     ("""EdgeSnap is 0.41: a beta, complete in what it does and tested on real
 MorphOS hardware and on AmigaOS 4 and AROS under emulation.
-@{b}edgesnap.library@{ub} says 2.20, and that is not a mistake: a
+@{b}edgesnap.library@{ub} says %%LIBVER%%, and that is not a mistake: a
 """,
      """EdgeSnap is 0.41: a beta, complete in what it does and tested on
 AmigaOS 3.2, on real hardware and under emulation.
-@{b}edgesnap.library@{ub} says 2.22, and that is not a mistake: a
+@{b}edgesnap.library@{ub} says %%LIBVER%%, and that is not a mistake: a
 """),
     ("""@{b}esnaptest@{ub}, in the os4, mos and aros64 drawers of this package,
 is a small client""",

@@ -51,8 +51,12 @@ ARCHIVE = os.path.join(ROOT, "build", "EdgeSnap-%s.lha" % VERSION)
 ARCHIVE_AROS = os.path.join(ROOT, "build", "EdgeSnap-%s-AROS64.lha" % VERSION)
 # From the second AROS release on, the previous archive is named here so
 # the old entry does not survive beside the new one. None for the first.
-AROS_REPLACES_AMINET = "util/cdity/edgesnap.x86_64-aros.lha"  # 0.31, checked 2026-09-26
+AROS_REPLACES_AMINET = "util/cdity/edgesnap.x86_64-aros.lha"  # 0.4, checked 2026-10-03
 AROS_REPLACES_ARCHIVES = "utility/workbench/edgesnap.x86_64-aros-v11.lha"
+# The AROS Archives give a replaced file a NEW id: the 0.4 upload replaced
+# 3393 and became 3441. Before each release, read it off the entry's page
+# (the fileid= in its links) and set it here.
+AROS_ARCHIVES_FILEID = 3441  # 0.4, checked 2026-10-04
 OUT = os.path.join(ROOT, "build", "channels")
 
 AUTHOR = "Michele Dipace <michele.dipace@kaffeine.net>"
@@ -71,32 +75,31 @@ SHORT = "Tile windows by dragging them to an edge"
 
 BODY = [
     ("WHAT IS NEW IN %s" % VERSION, """
-A window can now go to the middle of the screen at the size it has
-(ctrl alt c), and ctrl alt z opens a small selector under the pointer:
-nine cells that are the map of the screen, one for each place a window
-can go, chosen with the mouse or the cursor keys.
+A corner is now the corner itself. Anywhere along a side edge gives the
+half, even with the title bar right under the screen's own; for a
+quarter, push the pointer on into the corner, where the screen stops
+it. The top edge is the screen's own title bar, so a window that sits
+at the top is no longer maximised the moment it is touched. The Corner
+size setting gives the longer corners back. Preferences saved by an
+earlier version keep the corner size they had, 4: set it to 0 for the
+corner itself.
 
-Windows glide into place instead of jumping. I judged the glide on real
-MorphOS hardware before making it the default, and it can be switched
-off in the preferences ("Glide into place") by anyone who prefers the
-jump.
+A window that may not go past the edge of the screen keeps the pointer
+from reaching it. Each system has its own setting for that, and the
+preferences now show it on all three as "Windows can move off-screen".
+On MorphOS, where it is off as delivered, the first installation turns
+it on and says so. From a Shell: SYS:Prefs/EdgeSnap OFFSCREEN followed
+by QUERY, ON or OFF. Where it stays off, pushing the mouse on against
+the edge now brings the frame up reliably under a real hand, corners
+included.
 
-Pressing the same side hotkey again gives the window two thirds of the
-screen, then one third, then a half again. That can be switched off too,
-and from this version switching it off really works.
+The preferences program now writes a setting left at its default as a
+comment, so a better default in a later version reaches everyone who
+never changed that setting.
 
-The seam between two windows is more careful: its handle gives back what
-it covered, and a window laid over a snapped pair no longer shows the
-handle through it or lets it take the clicks meant for that window.
-
-Carlo Spadoni drew the icons for all three systems: the program, the
-preferences, the drawer, the installer and the documents.
-
-For programmers, edgesnap.library 2.17 adds what a tiling window manager
-needs from it: client roles, so that one program owns the drag and others
-own their layouts; work areas with an identity that survives a screen
-mode change; and layout groups that can keep other programs off their
-windows.
+For programmers, edgesnap.library now gives a layout group gaps
+between its windows and margins from the edges of the screen, applied
+when a program places one of the group's windows as a cell.
 """),
     ("WHAT IT IS", """
 EdgeSnap gives AmigaOS 4.x, MorphOS and AROS x86_64 the window snapping that Windows
@@ -163,8 +166,9 @@ Since 2.10 the library also serves tiling window managers: one client
 owns the interactive drag and any number own their layouts, work areas
 keep an identity across a screen mode change, and a layout group can
 keep every other program, the commodity's drag included, off its
-windows. The included esnaptest client exercises the whole API on all
-three systems.
+windows. Since 2.20 a group can also keep gaps between its windows and
+margins from the edges of the screen. The included esnaptest client
+exercises the whole API on all three systems.
 
 The library says %s while EdgeSnap says %s, and that is not a mistake:
 a library's version is its interface, not its product. While EdgeSnap is
@@ -318,6 +322,129 @@ def arosarchives_readme():
     return head + AROS_ARCHIVES_NOTE + body_lines()
 
 
+# ------------------------------------------- the two channels done by hand
+#
+# Both used to be written by hand into build/channels, which this script
+# empties on every run: the 0.4 ones were gone by the next release. Now
+# they are made here, with the archives they go with.
+
+# Michele runs this one: it asks for the passphrase itself, and the agent
+# never types a passphrase anywhere.
+AROS_ARCHIVES_SCRIPT = r'''#!/bin/bash
+# EdgeSnap @@VERSION@@ to The AROS Archives: the x86_64 archive replaces
+# the previous one (FileID @@FILEID@@, "Replace file"). The passphrase
+# (telegram-amiga SECRETS, entry for EdgeSnap's AROS Archives) is asked of
+# you, never shown and never written to disk; curl reads it from stdin, so
+# it does not appear among the process arguments either. The site's answer
+# page prints it back in clear, which is why this script prints only OK or
+# ERRORE.
+#   bash publish-arosarchives-@@VERSION@@.sh          send it
+#   DRY=1 bash publish-arosarchives-@@VERSION@@.sh    show the fields, send nothing
+set -u
+cd "$(dirname "$0")/arosarchives" || exit 1
+BASE='https://archives.arosworld.org/index.php?function=submit'
+
+field() { sed -n "s/^$1://p" "$2" | head -1; }
+body() { sed '1,/^hend:$/d' "$1"; }
+
+if [ -z "${DRY:-}" ]; then
+    printf 'Passphrase AROS Archives di EdgeSnap (non viene mostrata): '
+    IFS= read -r -s PASS
+    echo
+    [ -n "$PASS" ] || { echo "passphrase vuota: niente invio"; exit 1; }
+fi
+
+send() { # $1 = archive, $2 = URL tail
+    lha=$1
+    readme="${lha%.lha}_lha.readme"
+    [ -f "$lha" ] && [ -f "$readme" ] || { echo "ERRORE  manca $lha o $readme"; return; }
+    if [ -n "${DRY:-}" ]; then
+        echo "== $lha -> $BASE$2"
+        for k in name description version author submitter email url category replaces requirements license; do
+            printf '   f_%-13s %s\n' "$k" "$(field $k "$readme")"
+        done
+        echo "   f_text         $(body "$readme" | wc -l | tr -d ' ') righe, $(body "$readme" | wc -c | tr -d ' ') byte"
+        echo "   f_userfile     $(stat -f %z "$lha") byte, md5 $(md5 -q "$lha")"
+        return
+    fi
+    out=$(mktemp)
+    printf '%s' "$PASS" | curl -sS -L -o "$out" "$BASE$2" \
+        --form-string "f_name=$(field name "$readme")" \
+        --form-string "f_description=$(field description "$readme")" \
+        --form-string "f_version=$(field version "$readme")" \
+        --form-string "f_author=$(field author "$readme")" \
+        --form-string "f_submitter=$(field submitter "$readme")" \
+        --form-string "f_email=$(field email "$readme")" \
+        --form-string "f_url=$(field url "$readme")" \
+        --form-string "f_category=$(field category "$readme")" \
+        --form-string "f_replaces=$(field replaces "$readme")" \
+        --form-string "f_requirements=$(field requirements "$readme")" \
+        --form-string "f_license=$(field license "$readme")" \
+        --form-string "f_distributesubm=selected" \
+        --form-string "f_distribute=on" \
+        -F "f_passphrase=<-" \
+        --form-string "f_text=$(body "$readme")" \
+        --form-string "f_submit_go=Submit" \
+        -F "f_userfile=@$lha;type=application/octet-stream"
+    if grep -qi 'as soon as possible' "$out"; then
+        echo "OK      $lha"
+        rm -f "$out"
+    else
+        echo "ERRORE  $lha: risposta del sito in $out"
+        echo "        (contiene la passphrase in chiaro: cancellalo dopo averlo letto)"
+    fi
+}
+
+send edgesnap.x86_64-aros-v11.lha '&replace=@@FILEID@@&mode=go'
+unset PASS
+echo "Coda: https://archives.arosworld.org/index.php?function=uploads"
+'''
+
+# The short description stays; the line of news changes with every
+# release, like the body above.
+MORPHOS_STORAGE_SHORT = """Window snapping for MorphOS, AmigaOS 4 and AROS: drag a window against a
+screen edge or corner and it glides into that half or quarter of the
+screen. Two windows side by side share a seam that can be dragged to
+re-balance them. It installs as a commodity that starts with the system.
+MIT licence."""
+MORPHOS_STORAGE_NEW = ("New in %s: a corner is the corner itself and the top "
+                       "edge the screen's bar, the system's off-screen setting "
+                       "in the preferences, a push against the edge that works "
+                       "under a real hand, defaults written as comments, and "
+                       "library %s with gaps and margins per group."
+                       % (VERSION, LIBRARY_VERSION))
+
+
+def arosarchives_script():
+    return (AROS_ARCHIVES_SCRIPT.replace("@@VERSION@@", VERSION)
+            .replace("@@FILEID@@", str(AROS_ARCHIVES_FILEID)))
+
+
+def morphos_storage_form():
+    data = open(ARCHIVE, "rb").read()
+    return [
+        "MorphOS-Storage, EdgeSnap %s: cosa mettere nel form" % VERSION,
+        "(https://www.morphos-storage.net/?page=submit, categoria "
+        "Ambient/Commodities)",
+        "",
+        "Nome:        Michele Dipace",
+        "Email:       %s" % EMAIL,
+        "Homepage:    %s" % URL,
+        "Software:    EdgeSnap",
+        "Versione:    %s" % VERSION,
+        "Archivio:    build/channels/morphos-storage/edgesnap.lha",
+        "             (%d byte, md5 %s)" % (len(data),
+                                            hashlib.md5(data).hexdigest()),
+        "Readme:      build/channels/morphos-storage/edgesnap.readme",
+        "Screenshot:  facoltativo, docs/screenshots/prefs-morphos.jpg",
+        "",
+        "Descrizione (corta):",
+    ] + MORPHOS_STORAGE_SHORT.split("\n") + [
+        "",
+        "Novita' (facoltative, le porta comunque il readme):",
+    ] + textwrap.wrap(MORPHOS_STORAGE_NEW, width=74)
+
+
 def write(path, lines):
     # LF only, no trailing blanks, exactly what the channels ask for.
     with open(path, "w", newline="\n") as fh:
@@ -379,6 +506,19 @@ def main():
         check(rp, "%s/%s" % (name, readme), problems,
               name_max=None if name == "arosarchives" else 30)
         print("%-16s %s + %s" % (name, lha, readme))
+
+    script = os.path.join(OUT, "publish-arosarchives-%s.sh" % VERSION)
+    with open(script, "w", newline="\n") as fh:
+        fh.write(arosarchives_script())
+    os.chmod(script, 0o755)
+    form = os.path.join(OUT, "morphos-storage",
+                        "MORPHOS-STORAGE-%s.txt" % VERSION)
+    write(form, morphos_storage_form())
+    check(form, "morphos-storage/" + os.path.basename(form), problems,
+          name_max=None)
+    print("by hand          %s (replaces FileID %d), %s" %
+          (os.path.relpath(script, ROOT), AROS_ARCHIVES_FILEID,
+           os.path.relpath(form, ROOT)))
 
     print()
     for archive in (ARCHIVE, ARCHIVE_AROS):

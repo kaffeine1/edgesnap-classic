@@ -124,15 +124,24 @@
  *       68k machines differ too much in speed for one default and
  *       without a graphics card a glide can crawl. ES_OPT_Animate and
  *       the ANIMATE setting turn it on as before.
- *   2.21 - the classic systems only: the other systems' 2.20, with the
- *       classic choices kept (no push, the glide off as the settings
- *       come). A classic client checks for 2.21 before it calls
- *       SetGroupOptionsA: their 2.20 did not have it, and refuses
+ *   2.21 - the push against an edge that holds the pointer back counts
+ *       under a real hand: a report without travel on an axis no
+ *       longer starts that axis over, a drift along the other axis
+ *       no longer adds up to a corner, and the zone no longer comes
+ *       and goes at the wall. No vector changes.
+ *       On the classic systems 2.21 was their own: the other systems'
+ *       2.20, with the classic choices kept (no push, the glide off as
+ *       the settings come). A classic client checks for 2.21 before it
+ *       calls SetGroupOptionsA: their 2.20 did not have it, and refuses
  *       ES_PF_CELL.
  *   2.22 - the classic systems only: the glide goes whatever the size
  *       of the window. Elsewhere a window above 1280x800 jumps, to
  *       spare it the redraws; there the glide is off as the settings
  *       come, and whoever turns it on has judged the machine.
+ *   2.23 - the classic systems only: the other systems' 2.21, with the
+ *       classic choices kept. The push stays off there, so the
+ *       rewritten push changes nothing in use; the number moves so that
+ *       it stays above both.
  */
 #define ES_API_VERSION       2
 /* A client that uses a vector appended after 2.2 must check that the

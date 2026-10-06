@@ -56,6 +56,8 @@ python3 "$ROOT/scripts/derive-68k-guide.py" \
     "$ROOT/packaging/EdgeSnap.guide.in" "$GUIDE_IN"
 # the defaults printed in the guide are the classic lane's: see COMMON
 # in Makefile.m68k
+GUIDE_LIBVER="2.$(sed -n 's/^#define ES_LIB_REVISION  *\([0-9]*\).*/\1/p' \
+                  "$ROOT/library/m68k/edgesnap_library.c")" \
 GUIDE_CFLAGS="-DES_CONFIG_ANIMATE_DEFAULT=0" \
     "$ROOT/scripts/make-guide.sh" "$DEST/EdgeSnap.guide" "$GUIDE_IN" >/dev/null
 rm -f "$GUIDE_IN"
