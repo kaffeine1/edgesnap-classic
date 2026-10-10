@@ -67,7 +67,7 @@ Short:        Tile windows by dragging them to an edge
 Author:       michele.dipace@kaffeine.net (Michele Dipace)
 Uploader:     michele.dipace@kaffeine.net (Michele Dipace)
 Type:         util/cdity
-Version:      0.41 (beta)
+Version:      0.42 (beta)
 Architecture: m68k-amigaos >= 2.0.4
 License:      MIT
 

@@ -17,7 +17,7 @@ import sys
 
 PAIRS = [
     # the systems
-    ("Window snapping for AmigaOS 4.x, MorphOS and AROS x86_64\n",
+    ("Window snapping for AmigaOS 4.x, MorphOS and AROS (x86_64 and aarch64)\n",
      "Window snapping for AmigaOS 3.1 and later, on the 68k\n"),
 
     # what the installer puts where
@@ -31,7 +31,14 @@ PAIRS = [
 On AROS the commodity goes to @{b}SYS:WBStartup/EdgeSnap@{ub} with its
 icon instead, and Wanderer starts it at every boot: a Run line in
 S:User-Startup would open a console window for it there and keep it
-open. S:User-Startup only gets a comment saying so.
+open. S:User-Startup is not touched.
+
+On AROS for the Raspberry Pi there is no Installer to go through:
+Install does the work itself, as it does on any AROS whose own
+Installer cannot copy files. One requester says what goes where and
+asks; the manual goes to SYS:Documentation, or SYS:Locale/Help where
+there is none; and no settings file is written, since the preferences
+window writes one when you press Save.
 """,
      """  @{b}LIBS:edgesnap.library@{ub}    everything EdgeSnap knows how to do
   @{b}SYS:WBStartup/EdgeSnap@{ub}   the commodity you interact with, with
@@ -45,6 +52,16 @@ SYS:WBStartup like any other, and the icon's tooltypes are read as
 Workbench starts it. It needs AmigaOS 2.04 or later; it was tested on
 3.2, and it runs on any 68000 or later, with or without a graphics
 card.
+"""),
+    ("""and nothing for you to type. On the Raspberry Pi the old library cannot
+be let go of yet, so a new one takes over at the next boot. Your
+settings are left alone: the commented template is only offered when
+ENVARC:EdgeSnap.prefs does not exist yet, and a file already there is
+never touched.
+""",
+     """and nothing for you to type. Your settings are left alone: the
+commented template is only offered when ENVARC:EdgeSnap.prefs does not
+exist yet, and a file already there is never touched.
 """),
     ("""To remove it: delete the two files above and the line between
 @{b};BEGIN EdgeSnap@{ub} and @{b};END EdgeSnap@{ub} in S:User-Startup.
@@ -146,18 +163,20 @@ expected. Stop the copy Workbench started first, with
 """),
 
     # for programmers
-    ("""EdgeSnap is 0.41: a beta, complete in what it does and tested on real
-MorphOS hardware and on AmigaOS 4 and AROS under emulation.
+    ("""EdgeSnap is 0.42: a beta, complete in what it does and tested on real
+MorphOS hardware, on a Raspberry Pi 400 with AROS, and on AmigaOS 4 and
+AROS x86_64 under emulation.
 @{b}edgesnap.library@{ub} says %%LIBVER%%, and that is not a mistake: a
 """,
-     """EdgeSnap is 0.41: a beta, complete in what it does and tested on
+     """EdgeSnap is 0.42: a beta, complete in what it does and tested on
 AmigaOS 3.2, on real hardware and under emulation.
 @{b}edgesnap.library@{ub} says %%LIBVER%%, and that is not a mistake: a
 """),
-    ("""@{b}esnaptest@{ub}, in the os4, mos and aros64 drawers of this package,
-is a small client""",
-     """@{b}esnaptest@{ub}, in the m68k drawer of this package,
-is a small client"""),
+    ("""@{b}esnaptest@{ub}, in this package's drawer for each system (os4, mos,
+aros64 or aarch64), is a small client that opens the library and
+drives the whole API""",
+     """@{b}esnaptest@{ub}, in the m68k drawer of this package, is a small
+client that opens the library and drives the whole API"""),
 ]
 
 

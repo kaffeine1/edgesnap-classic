@@ -6,10 +6,13 @@
  * edges (AmiDock on OS4, Ambient panels on MorphOS), macOS-style.
  *
  * Pure C89 geometry, host-tested. The platform glue does the walking
- * and the filtering it alone can do (borderless, no drag bar, no size
- * gadget, no backdrop, not one of our own preview windows) and passes
- * the surviving window boxes here; this module decides which of them
- * are edge panels and how much of each screen edge they reserve.
+ * and the filtering it alone can do (no drag bar, no size gadget, not
+ * one of our own preview windows; borderless is not required and a
+ * backdrop window is not refused, since Ambient can keep a panel
+ * behind the windows) and passes the surviving window boxes here; this
+ * module decides which of them are edge panels and how much of each
+ * screen edge they reserve. The desktop's own backdrop window covers
+ * the whole screen and fails the thickness rule below.
  *
  * Heuristic (documented, field-tuned on real MorphOS, 2026-08-26):
  *   - a panel lives in the OUTER BAND of the screen: its gap from the
@@ -18,7 +21,16 @@
  *     a dock anywhere in the outer band is always reserved;
  *   - it is thin: thickness <= screen dimension / ES_PANEL_MAX_THICK_DIV;
  *   - it is long enough to be a bar, not a corner widget:
- *     length >= ES_PANEL_MIN_LEN_PCT % of its edge.
+ *     length >= ES_PANEL_MIN_LEN_PCT % of its edge. A strip standing
+ *     along a side edge is a bar also when it is at least
+ *     ES_PANEL_MIN_ASPECT times as tall as it is wide, whatever share
+ *     of the edge it covers: a dock is made of icons, which keep their
+ *     size on any screen, and three of them down the side of a
+ *     1080-line screen make 156 lines, under 15% (field case, MorphOS,
+ *     2026-10-08). A strip lying along the top or the bottom keeps the
+ *     share alone: thin and long is also what a tooltip, a label or a
+ *     notification looks like, and they run across the screen, not
+ *     down it.
  * A panel reserves from the screen edge up to its far side, gap
  * included, PLUS ES_PANEL_MARGIN_PX of breathing room so snapped
  * windows never sit glued to the dock. Multiple panels on one edge
@@ -34,6 +46,7 @@
 #define ES_PANEL_MAX_GAP_DIV    4
 #define ES_PANEL_MAX_THICK_DIV  4
 #define ES_PANEL_MIN_LEN_PCT   15
+#define ES_PANEL_MIN_ASPECT     2
 #define ES_PANEL_MARGIN_PX      8
 
 /* es_panel_classify() results. */

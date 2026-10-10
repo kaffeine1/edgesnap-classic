@@ -8,7 +8,7 @@
 
 (set #app "EdgeSnap")
 
-(set #app-version "0.41 beta")
+(set #app-version "0.42 beta")
 
 ; Short enough for the first window of AmigaOS 4's Installer: with
 ; the old paragraph the text ran under the buttons that choose the
@@ -106,28 +106,55 @@
 ; Is an older EdgeSnap already on this machine? The answer changes how
 ; the installation can end: a fresh one can simply be started, an
 ; update has to deal with the previous version still being in memory.
-(if (exists "LIBS:edgesnap.library" (noreq))
+(if (exists "LIBS:edgesnap.library")
     (set #update 1)
     (set #update 0))
 
-; --- which system? MorphOS is the one with MOSSYS:, AROS the one with
-; aros.library; of the two AmigaOS the classic one has an exec below
-; version 50 (3.1 is 40, 3.1.4 is 45 and 46, 3.2 is 47; AmigaOS 4
-; starts at 50) -------------------------------------------------------
-(if (exists "MOSSYS:" (noreq))
-    (set #detected 1)
-    (if (exists "LIBS:aros.library" (noreq))
-        (set #detected 2)
+; --- which system? AROS is the one with aros.library; MorphOS the one
+; with MOSSYS:. AROS is asked first: the Installer AROS builds for itself
+; (the one on the Raspberry Pi) does not implement (noreq), so on AROS a
+; look for MOSSYS: would put up "insert volume MOSSYS". (noreq) is kept
+; for that one test only: a file that is not there on LIBS:, C: or SYS:
+; raises no requester, a volume that is not there does.
+; AROS names its processor in exec.library's version string
+; ("exec.library raspi-aarch64 51.9" on a Raspberry Pi 400). That same
+; Installer cannot run Version for it (its run neither searches the path
+; nor redirects) and its patmatch may not be there, so the AROS archives'
+; Install, a Shell script, reads the string and leaves ENV:EdgeSnapARM
+; or ENV:EdgeSnapX86 behind before it starts the Installer: (exists) is
+; all this needs. Started by hand, without either, the build this
+; archive carries is proposed. --------------------------------------
+; Of the two AmigaOS, the classic one has an exec below version 50
+; (3.1 is 40, 3.1.4 is 45 and 46, 3.2 is 47; AmigaOS 4 starts at 50):
+; it is system 4 here, after the two AROS.
+(if (exists "LIBS:aros.library")
+    (
+      (set #detected 2)
+      (if (exists "ENV:EdgeSnapARM")
+          (set #detected 3)
+          (if (not (exists "ENV:EdgeSnapX86"))
+              (if (exists "aarch64/edgesnap.library")
+                  (set #detected 3))))
+    )
+    (if (exists "MOSSYS:" (noreq))
+        (set #detected 1)
         (if (< (/ (getversion "exec.library" (resident)) 65536) 50)
-            (set #detected 3)
+            (set #detected 4)
             (set #detected 0))))
 
 (set #system
   (askchoice
     (prompt #ask-system)
     (help #ask-system-help)
-    (choices "AmigaOS 4.x" "MorphOS" "AROS x86_64" "AmigaOS 3.1 and later (68k)")
+    (choices "AmigaOS 4.x" "MorphOS" "AROS x86_64" "AROS aarch64"
+             "AmigaOS 3.1 and later (68k)")
     (default #detected)))
+
+; Both AROS builds install the same way; #system picks only the files.
+; The classic systems, number 4, are not AROS.
+(set #aros 0)
+(if (or (= #system 2) (= #system 3))
+    (set #aros 1))
 
 ; Where the commodity lives and how it starts. On AmigaOS 4 and MorphOS
 ; it goes to C: with one line in S:User-Startup. On AROS a Run from
@@ -138,6 +165,12 @@
 (set #startup-line "Run >NIL: C:EdgeSnap")
 (set #cmd-dest "C:")
 (set #cmd-path "C:EdgeSnap")
+; The Installer AROS builds for itself runs a command by loading it: no
+; search of the command path, no redirection (">NIL:" would reach the
+; command as an argument). On AROS every command is named in full and
+; nothing is redirected.
+(set #wait-cmd "C:Wait >NIL: 2")
+(set #flush-cmd "C:Avail >NIL: FLUSH")
 (if (= #system 0)
     (
       (set #libsrc "os4/edgesnap.library")
@@ -155,15 +188,26 @@
       (set #libsrc "aros64/edgesnap.library")
       (set #cmdsrc "aros64/EdgeSnap")
       (set #prefssrc "aros64/EdgeSnapPrefs")
+    ))
+(if (= #system 3)
+    (
+      (set #libsrc "aarch64/edgesnap.library")
+      (set #cmdsrc "aarch64/EdgeSnap")
+      (set #prefssrc "aarch64/EdgeSnapPrefs")
+    ))
+(if (= #aros 1)
+    (
       (set #cmd-dest "SYS:WBStartup")
       (set #cmd-path "SYS:WBStartup/EdgeSnap")
-      (if (exists "C:WBRun" (noreq))
-          (set #startup-line "WBRun SYS:WBStartup/EdgeSnap")
-          (set #startup-line "Run >NIL: <NIL: SYS:WBStartup/EdgeSnap"))
+      (set #wait-cmd "C:Wait 2")
+      (set #flush-cmd "C:Avail FLUSH")
+      (if (exists "C:WBRun")
+          (set #startup-line "C:WBRun SYS:WBStartup/EdgeSnap")
+          (set #startup-line "C:Run >NIL: <NIL: SYS:WBStartup/EdgeSnap"))
     ))
 ; The classic systems: SYS:WBStartup with the icon, the drawer every
 ; Workbench since 2.0 starts things from, and S:User-Startup untouched.
-(if (= #system 3)
+(if (= #system 4)
     (
       (set #libsrc "m68k/edgesnap.library")
       (set #cmdsrc "m68k/EdgeSnap")
@@ -175,12 +219,14 @@
           (abort "EdgeSnap needs AmigaOS 2.04 or later."))
     ))
 
-; A package carries the builds it carries, which may be fewer than the
-; four systems above. Stop here with a plain word, not at the first
-; copy that finds no file.
-(if (= (exists #libsrc (noreq)) 0)
-    (abort (cat "This package has no build for the system chosen: "
-                #libsrc " is not in it.")))
+; Each AROS processor has its own archive: the one for the other
+; processor carries no files for the system chosen here.
+(if (not (exists #libsrc))
+    (abort (cat "This package has no EdgeSnap for the system you chose.\n\n"
+                "AmigaOS 4 and MorphOS share one archive; AROS has one for "
+                "x86_64 and one for aarch64 (Raspberry Pi); AmigaOS 3.1 and "
+                "later on the 68k has its own. Download the one for this "
+                "machine.")))
 
 (complete 20)
 
@@ -190,7 +236,7 @@
 ; cannot replace what it put there itself. So: unlock what is already
 ; installed before replacing it, and leave everything we install in a
 ; state the next update can overwrite.
-(if (exists "LIBS:edgesnap.library" (noreq))
+(if (exists "LIBS:edgesnap.library")
     (protect "LIBS:edgesnap.library" "+rwed"))
 
 ; --- the library ----------------------------------------------------
@@ -206,7 +252,7 @@
 (complete 50)
 
 ; --- the commodity --------------------------------------------------
-(if (exists #cmd-path (noreq))
+(if (exists #cmd-path)
     (protect #cmd-path "+rwed"))
 
 (copyfiles
@@ -220,8 +266,8 @@
 ; On AROS and on the classic systems the icon beside it, as a plain
 ; file (see the preferences for why not (infos)): it is what makes
 ; Wanderer, or Workbench, start it from WBStartup.
-(if (or (= #system 2) (= #system 3))
-    (if (exists (cat #cmdsrc ".info") (noreq))
+(if (or (= #aros 1) (= #system 4))
+    (if (exists (cat #cmdsrc ".info"))
         (
           (copyfiles
             (source (cat #cmdsrc ".info"))
@@ -236,9 +282,9 @@
 ; SYS:Prefs/ is where people look for it, so that is where it goes,
 ; icon included - a preferences program nobody can find is a text file
 ; with extra steps.
-(if (exists "SYS:Prefs/EdgeSnap" (noreq))
+(if (exists "SYS:Prefs/EdgeSnap")
     (protect "SYS:Prefs/EdgeSnap" "+rwed"))
-(if (exists "SYS:Prefs/EdgeSnap.info" (noreq))
+(if (exists "SYS:Prefs/EdgeSnap.info")
     (protect "SYS:Prefs/EdgeSnap.info" "+rwed"))
 
 ; On AROS the icon goes as a plain file: the Installer's (infos) copy
@@ -259,7 +305,7 @@
         (newname "EdgeSnap")
         (dest "SYS:Prefs")
         (confirm))
-      (if (exists (cat #prefssrc ".info") (noreq))
+      (if (exists (cat #prefssrc ".info"))
           (copyfiles
             (source (cat #prefssrc ".info"))
             (newname "EdgeSnap.info")
@@ -277,7 +323,7 @@
 (protect "SYS:Prefs/EdgeSnap" "+rwed")
 ; The icon comes off the CD with the CD's own bits, and an icon that
 ; cannot be deleted stops the next installation dead.
-(if (exists "SYS:Prefs/EdgeSnap.info" (noreq))
+(if (exists "SYS:Prefs/EdgeSnap.info")
     (protect "SYS:Prefs/EdgeSnap.info" "+rwed"))
 
 (complete 70)
@@ -312,23 +358,22 @@
 ; resetting the Workbench screen appears in the middle of installing.
 ; An update leaves it alone: whoever turned it back meant it.
 ; EdgeSnap's preferences program does the work, and has the box.
-(if (= #system 3)
+(if (= #system 4)
     (if (= #update 0)
         (if (= (run "SYS:Prefs/EdgeSnap >NIL: OFFSCREEN QUERY BOOTONLY" (safe)) 5)
             (if (= (run "SYS:Prefs/EdgeSnap >NIL: OFFSCREEN ON BOOTONLY") 0)
                 (set #offscreen 1)))))
 
 ; --- start it with the system ---------------------------------------
-; On the classic systems nothing is written: Workbench starts what is
-; in SYS:WBStartup, and S:User-Startup is left as it was.
-(if (= #system 2)
-    (startup #app
-      (prompt (cat "On AROS EdgeSnap starts from SYS:WBStartup, so no line is "
-                   "needed in S:User-Startup. A note is left there in its "
-                   "place, which also retires the line of an earlier "
-                   "installation."))
-      (help #startup-help)
-      (command "; EdgeSnap starts from SYS:WBStartup\n")))
+; Not on AROS. EdgeSnap starts from SYS:WBStartup there and needs no
+; line, and the Installer AROS builds for itself must not be asked to
+; edit S:User-Startup at all: its (startup) deletes the file and renames
+; the new one to "User-Startup" in the CURRENT directory, the package's
+; drawer (a FIXME in its own source says as much), and on a Raspberry Pi
+; 400 that would have taken BebboSSH's start out of the boot. Its page
+; for the question also stopped answering in the aarch64 VM (2026-10-10).
+; Not on the classic systems either: Workbench starts what is in
+; SYS:WBStartup, and S:User-Startup is left as it was.
 (if (or (= #system 0) (= #system 1))
     (startup #app
       (prompt #startup-prompt)
@@ -345,7 +390,7 @@
 ; and with the question answered by default nobody would even notice.
 ; The template is therefore offered ONLY when there is nothing there.
 ; Reported by a distribution maintainer reading the archive, 2026-09-08.
-(if (= (exists "ENVARC:EdgeSnap.prefs" (noreq)) 0)
+(if (= (exists "ENVARC:EdgeSnap.prefs") 0)
     (if (askbool
           (prompt "Install the commented preferences file into ENVARC:?")
           (help (cat "ENVARC:EdgeSnap.prefs is where EdgeSnap reads its "
@@ -369,33 +414,41 @@
 ; the user chooses, with a sensible default, and the closing text says
 ; where it went - otherwise the manual stays in the unpacked drawer and
 ; is thrown away with it.
+; AROS's own Installer fails to copy into the root of a volume ("Failed
+; to copy EdgeSnap.guide to SYS:EdgeSnap.guide" in the aarch64 VM, and it
+; then gives up): on AROS the manual goes where HELP: points instead,
+; LOCALE:Help, when there is no SYS:Documentation.
 (set #guide-dest
   (askdir
     (prompt #guide-prompt)
     (help #guide-help)
-    (default (if (= (exists "SYS:Documentation" (noreq)) 2)
+    (default (if (= (exists "SYS:Documentation") 2)
                  "SYS:Documentation"
-                 (if (= (exists "HELP:" (noreq)) 2)
-                     "HELP:"
-                     "SYS:")))))
+                 (if (and (= #aros 1) (= (exists "SYS:Locale/Help") 2))
+                     "SYS:Locale/Help"
+                     (if (= #system 4)
+                         (if (= (exists "HELP:" (noreq)) 2)
+                             "HELP:"
+                             "SYS:")
+                         "SYS:"))))))
 
 ; The icon too, before and after: it comes off the CD with the CD's
 ; own bits, and an icon that cannot be deleted stops the next
 ; installation dead. Found by installing 0.2 in the VM and listing the
 ; result: the guide was ----rwed and its icon ----r-e-.
-(if (exists (tackon #guide-dest "EdgeSnap.guide") (noreq))
+(if (exists (tackon #guide-dest "EdgeSnap.guide"))
     (protect (tackon #guide-dest "EdgeSnap.guide") "+rwed"))
-(if (exists (tackon #guide-dest "EdgeSnap.guide.info") (noreq))
+(if (exists (tackon #guide-dest "EdgeSnap.guide.info"))
     (protect (tackon #guide-dest "EdgeSnap.guide.info") "+rwed"))
 
 ; The manual and its icon; on AROS and the classic systems the icon as
 ; a plain file, for the reason given at the preferences above.
-(if (or (= #system 2) (= #system 3))
+(if (or (= #aros 1) (= #system 4))
     (
       (copyfiles
         (source "EdgeSnap.guide")
         (dest #guide-dest))
-      (if (exists "EdgeSnap.guide.info" (noreq))
+      (if (exists "EdgeSnap.guide.info")
           (copyfiles
             (source "EdgeSnap.guide.info")
             (dest #guide-dest)))
@@ -406,7 +459,7 @@
       (infos)))
 
 (protect (tackon #guide-dest "EdgeSnap.guide") "+rwed")
-(if (exists (tackon #guide-dest "EdgeSnap.guide.info") (noreq))
+(if (exists (tackon #guide-dest "EdgeSnap.guide.info"))
     (protect (tackon #guide-dest "EdgeSnap.guide.info") "+rwed"))
 
 (complete 95)
@@ -420,8 +473,8 @@
 ; the markers this Installer maintains, so it stays; once C:EdgeSnap is
 ; gone it does nothing, and the closing text names it for deletion.
 (set #old-preview 0)
-(if (= #system 2)
-    (if (exists "C:EdgeSnap" (noreq))
+(if (= #aros 1)
+    (if (exists "C:EdgeSnap")
         (if (askbool
               (prompt (cat "A copy of the first AROS preview is in C:EdgeSnap. "
                            "At boot it would start before the new one and "
@@ -434,8 +487,8 @@
                          "remove."))
               (default 1))
             (
-              (run "C:EdgeSnap QUIT")
-              (run "C:Wait >NIL: 2")
+              ; no (run) on AROS: the copy still running goes at the
+              ; next boot, when there is no file left to start
               (protect "C:EdgeSnap" "+rwed")
               (delete "C:EdgeSnap" (optional "force"))
               (set #old-preview 1)
@@ -446,25 +499,36 @@
 ; So stop it, let the library go, and start what was just installed -
 ; the user should not have to know the words "Avail FLUSH", and this
 ; Installer has no (reboot) to offer them instead.
-(if (= #update 1)
+; Not from here on AROS: the (run) of the Installer AROS builds for
+; itself neither searches the command path nor understands a redirection,
+; so there the AROS archives' Install, a Shell script, does these steps
+; once the Installer is done, and only if it was told so: the drawer
+; T:EdgeSnapInstalled, made last of all. (Avail FLUSH itself dies with
+; an illegal instruction on AROS aarch64, from a Shell too: the script
+; flushes on x86_64 only.)
+(if (= #aros 0)
     (
-      (run (cat #cmd-path " QUIT"))
-      (run "C:Wait >NIL: 2")
+      (if (= #update 1)
+          (
+            (run (cat #cmd-path " QUIT"))
+            (run #wait-cmd)
+          ))
+      (run #flush-cmd)
     ))
-
-(run "C:Avail >NIL: FLUSH")
 
 (complete 100)
 
-(if (askbool
-      (prompt (cat "EdgeSnap is installed.\n\nStart it now, so that "
-                   "snapping works right away?"))
-      (help (cat "EdgeSnap starts by itself at every boot in any case. "
-                 "Saying yes here only saves you the wait - and, after "
-                 "an update, puts the version just installed in charge "
-                 "of the one that was running before.\n\n"))
-      (default 1))
-    (run #startup-line))
+(if (= #aros 0)
+    (if (askbool
+          (prompt (cat "EdgeSnap is installed.\n\nStart it now, so that "
+                       "snapping works right away?"))
+          (help (cat "EdgeSnap starts by itself at every boot in any case. "
+                     "Saying yes here only saves you the wait - and, after "
+                     "an update, puts the version just installed in charge "
+                     "of the one that was running before.\n\n"))
+          (default 1))
+        (run #startup-line))
+    (makedir "T:EdgeSnapInstalled"))
 
 ; What was changed outside EdgeSnap is said on a page of its own, to
 ; every user level: nobody should find a system setting different and
@@ -475,7 +539,7 @@
 ; that concludes that EdgeSnap does not work.
 (if (= #offscreen 1)
     (message
-      (if (= #system 3)
+      (if (= #system 4)
           (cat "PLEASE RESTART THE SYSTEM when this installation is over.\n\n"
                "Until then the hotkeys work, and dragging a window to an "
                "edge does not snap it.\n\n"
@@ -501,14 +565,17 @@
 ; where any of it went.
 (exit (cat #done-head
            "    " #cmd-path "\n"
-           #done-mid
-           (if (= #system 2)
+           (if (= #aros 1)
                "    (started by Wanderer at every boot)\n"
-               (if (= #system 3)
+               (if (= #system 4)
                    "    (started by Workbench at every boot)\n"
-                   "    one line in S:User-Startup\n"))
+                   ""))
+           #done-mid
+           (if (or (= #aros 1) (= #system 4))
+               ""
+               "    one line in S:User-Startup\n")
            "    " (tackon #guide-dest "EdgeSnap.guide") "\n\n"
-           (if (and (= #offscreen 1) (= #system 3))
+           (if (and (= #offscreen 1) (= #system 4))
                "NOW RESTART THE SYSTEM: dragging needs it, once.\n"
                "The drawer you ran this from can be deleted.\n")
            (if (= #old-preview 1)

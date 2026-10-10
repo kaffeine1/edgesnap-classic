@@ -134,14 +134,28 @@
  *       the settings come). A classic client checks for 2.21 before it
  *       calls SetGroupOptionsA: their 2.20 did not have it, and refuses
  *       ES_PF_CELL.
- *   2.22 - the classic systems only: the glide goes whatever the size
- *       of the window. Elsewhere a window above 1280x800 jumps, to
- *       spare it the redraws; there the glide is off as the settings
- *       come, and whoever turns it on has judged the machine.
- *   2.23 - the classic systems only: the other systems' 2.21, with the
- *       classic choices kept. The push stays off there, so the
- *       rewritten push changes nothing in use; the number moves so that
- *       it stays above both.
+ *   2.22 - a dock down a side edge is a dock whatever its length: one
+ *       at least twice as tall as it is wide reserves its edge, so a
+ *       short one no longer has windows snapped over it. The usable
+ *       area of QueryScreenArea, the zones and ESWI_PANEL follow. No
+ *       vector changes.
+ *       On the classic systems 2.22 was their own: the glide goes
+ *       whatever the size of the window. Elsewhere a window above
+ *       1280x800 jumps, to spare it the redraws; there the glide is
+ *       off as the settings come, and whoever turns it on has judged
+ *       the machine.
+ *   2.23 - a panel kept behind the windows is a panel: backdrop windows
+ *       are no longer refused before the shape is looked at, so an
+ *       Ambient panel set to stay at the back reserves its edge. The
+ *       desktop's own backdrop window covers the screen and still
+ *       reserves nothing. No vector changes.
+ *       On the classic systems 2.23 was their own: the other systems'
+ *       2.21, with the classic choices kept. The push stays off there,
+ *       so the rewritten push changes nothing in use.
+ *   2.24 - the classic systems only: the other systems' 2.23, with the
+ *       classic choices kept (no push, a glide whatever the size, the
+ *       glide off as the settings come). The number moves so that it
+ *       stays above both.
  */
 #define ES_API_VERSION       2
 /* A client that uses a vector appended after 2.2 must check that the

@@ -180,10 +180,13 @@ interfaces). Heuristic instead:
 - Dock awareness (macOS-style, added 2026-08-26, field-tuned on real
   MorphOS the same day): edge strips reserved by panel-like windows are
   auto-subtracted from the usable area. Detection is split per the
-  architecture: the glue filters (no drag bar/size gadget/backdrop, not
-  ours - borderless deliberately NOT required), the host-tested core
+  architecture: the glue filters (no drag bar/size gadget, not ours -
+  borderless deliberately NOT required, backdrop allowed from 2.23:
+  see below), the host-tested core
   policy classifies. A panel is a thin (<= dimension/4), long-enough
-  (>= 15% of the edge) strip living in the OUTER BAND of the screen
+  (>= 15% of the edge, or for a strip standing along a side edge at
+  least twice as tall as it is wide, from 2.22: see below) strip
+  living in the OUTER BAND of the screen
   (gap from its nearest edge <= dimension/4): docks float and users
   raise them, so anywhere in the outer band counts, and the reservation
   runs from the screen edge to the panel's far side, gap included,
@@ -938,6 +941,78 @@ fails exactly those. On the same machine with 2.21 the frame came up
 regularly, the title bar grabbed far from its end, and a bottom corner
 came straight from a diagonal push. No vector changes; the revision
 moves because the behaviour does.
+
+**2.22, docks down the side (2026-10-08).** A user wrote that vertical
+docks were not detected, and that margins set by hand were the way
+round it. The ctrl alt d dump of the author's own MorphOS machine
+already showed it: an Ambient panel of three icons down the right
+edge, 48x156 at 1872,205 on a 1920x1080 screen, marked no-reserve.
+156 lines are 14.4% of 1080, under the 15% of its edge a panel had to
+cover, a rule meant to keep corner widgets out. A dock is made of
+icons, and icons keep their size on any screen, so the share was the
+wrong yardstick for it, and the larger the screen the more docks it
+missed. A strip standing along a side edge now counts as a bar also
+when it is at least twice as tall as it is wide (`ES_PANEL_MIN_ASPECT`
+in `core/panels.h`); one icon with its handle, or anything less than
+twice as tall, still does not. A strip lying along the top or the
+bottom keeps the share alone: thin and long is also the shape of a
+tooltip, a label or a notification, and those run across the screen,
+not down it. The price is that a short dock lying along the bottom,
+three icons or so, is still missed; nobody has reported one. The host
+tests carry the field case and fail on 2.21. No vector changes; the
+revision moves because the behaviour does.
+
+**2.23, panels kept at the back (2026-10-08).** The user who reported
+the vertical docks then sent a dump, and it told another story: their
+dock down the right edge, 48x540 at 1630,23 on a 1680x1050 screen,
+said "skip:flags". It was long enough for any rule; it never reached
+one. Its flags carried WFLG_BACKDROP: Ambient can keep a panel behind
+the windows, and the glue refused every backdrop window before
+looking at its shape, a filter there since the first dock code with no
+field case behind it, meant for the desktop's own backdrop window. That
+window covers the whole screen (Ambient 0,24 1680x1026, the Workbench
+on AmigaOS 4, Wanderer on AROS) and fails the thickness rule anyway, so
+the glue now refuses only a drag bar or a size gadget, in the usable
+area, in ESWI_PANEL and in the commodity's dump alike. A second
+preview has to be 2.23, not a second 2.22: the Installer's copylib
+replaces only an older library. No vector changes.
+
+**AROS aarch64, the Raspberry Pi (2026-10-10).** The third AROS lane
+asked nothing of the code. The same sources and the same
+`library/aros/edgesnap.conf` build on the bench with the aarch64-aros
+cross toolchain (GCC 6.5.0), whose driver already knows the raspi
+SDK and whose collect-aros marks the binaries as AROS ones, so the
+link needs none of the x86_64 lane's objcopy and OS/ABI byte. Two
+compiler flags are the platform's: `-ffixed-x18`, because x18 belongs
+to the system, and `-fno-common`, because the loader refuses COMMON
+symbols and GCC 6 makes a tentative definition COMMON. Plain `char` is
+unsigned there, as on PowerPC, and the core already reads characters as
+`unsigned char` (the host tests pass with `-funsigned-char`). On a
+Raspberry Pi 400 the first build ran whole: library, commodity from
+WBStartup, preferences, `esnaptest` to the end, snapping by hotkey and
+by drag. It ships as an archive of its own, and `Install` tells the two
+AROS processors apart by exec.library's version string
+("exec.library raspi-aarch64 51.9"), stopping with an explanation when
+the archive holds the other processor's build.
+
+**Installing on AROS without the Installer (2026-10-10).** The Pi 400's
+image carries AROS's own Installer, 43.3 of 2004: `copyfiles`,
+`copylib` and `protect` are each an "Unimplemented command" in it, and
+it hands a variable's value on with its first and last characters cut
+off, so the archive guard read "arch64/edgesnap.librar" and aborted.
+The research of August ("AROS ships InstallerLG") holds for AROS One,
+which has InstallerLG 44.10, and for the AROS builds of October, which
+have an Installer 44.10, not for the images before them. `Install` in
+the AROS archives, a Shell script run by IconX, therefore installs
+EdgeSnap itself: on aarch64 always (one way, the one tried on the
+Pi 400), on x86_64 when the Installer it finds carries those words. It
+puts the same files in the same places as `Install.script` on AROS,
+after one requester. Three rules of the AROS Shell shaped it: a command
+receives at most 256 characters of arguments (a longer requester text
+failed, and the script ended with nothing on screen), a variable name
+is letters and digits only, and a command failing at 10 or more ends
+the script unless FailAt says otherwise. `make-release.sh` measures
+the arguments of every line.
 
 **Where 0.3 stands (2026-09-06).** The prepared release includes the
 AROS x86_64 ABIv11 lane, library API 2.6 on all three systems, the

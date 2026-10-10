@@ -9,7 +9,7 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-VERSION="${1:-0.41}"
+VERSION="${1:-0.42}"
 
 # The version lives in include/edgesnap_version.h; the scripts and the
 # Installer cannot include a C header, so they are checked against it
@@ -33,6 +33,42 @@ do
         exit 1
     fi
 done
+# The AROS launcher installs by itself where the Installer cannot copy:
+# its requesters name the release, and it keeps a newer library as
+# (copylib) does, so it names the library's version too - the one
+# genmodule builds from library/aros/edgesnap.conf.
+if [ "$(grep -o 'EdgeSnap [0-9][0-9.]* beta' "$ROOT/installer/Install-aros" | sort -u)" != "EdgeSnap $VERSION beta" ]; then
+    echo "ERROR: installer/Install-aros does not name version $VERSION everywhere" >&2
+    exit 1
+fi
+LIBVER=$(sed -n 's/^version  *\([0-9][0-9.]*\).*/\1/p' "$ROOT/library/aros/edgesnap.conf")
+if ! grep -qF "LIBS:edgesnap.library ${LIBVER%.*} ${LIBVER#*.} FILE" "$ROOT/installer/Install-aros"; then
+    echo "ERROR: installer/Install-aros does not compare with library $LIBVER" >&2
+    exit 1
+fi
+# AROS hands a command at most 256 characters of arguments (ReadArgs
+# reads them with FGets into 257 bytes): a longer requester text made
+# RequestChoice fail, and the Shell end the script, before anything
+# showed on the Raspberry Pi 400. Every line's arguments are measured
+# with its variables at their longest; a variable not listed here is an
+# error, since it cannot be measured.
+if ! awk '
+    /^[ \t]*;/ || /^[ \t]*$/ { next }
+    {
+        s = $0
+        sub(/^[ \t]*[^ \t]+[ \t]*/, "", s)
+        while (s ~ /^[<>]/) sub(/^[<>]+[^ \t]*[ \t]*/, "", s)
+        gsub(/\$esguidef/, "SYS:Documentation/EdgeSnap.guide", s)
+        gsub(/\$esguide/, "SYS:Documentation", s)
+        gsub(/\$esbuild/, "aarch64", s)
+        gsub(/\$(EdgeSnapAns|esold|eslib|esdone)/, "1", s)
+        if (s ~ /\$/) { printf "line %d: a variable the check cannot measure\n", NR; bad = 1 }
+        if (length(s) > 250) { printf "line %d: %d characters of arguments\n", NR, length(s); bad = 1 }
+    }
+    END { exit bad }' "$ROOT/installer/Install-aros" >&2; then
+    echo "ERROR: installer/Install-aros passes a command more than AROS takes" >&2
+    exit 1
+fi
 echo "version $VERSION agrees across header, installer, guide and staging"
 
 # The host tests are the only proof the portable core has; a release
@@ -66,7 +102,8 @@ newest_name=${newest#* }
 stale=0
 for b in os4/EdgeSnap os4/edgesnap.library os4/EdgeSnapPrefs os4/esnaptest \
          morphos/EdgeSnap morphos/edgesnap.library morphos/EdgeSnapPrefs morphos/esnaptest \
-         aros-x86_64/EdgeSnap aros-x86_64/edgesnap.library aros-x86_64/EdgeSnapPrefs aros-x86_64/esnaptest; do
+         aros-x86_64/EdgeSnap aros-x86_64/edgesnap.library aros-x86_64/EdgeSnapPrefs aros-x86_64/esnaptest \
+         aros-aarch64/EdgeSnap aros-aarch64/edgesnap.library aros-aarch64/EdgeSnapPrefs aros-aarch64/esnaptest; do
     f="$ROOT/build/$b"
     if [ ! -f "$f" ]; then
         echo "ERROR: build/$b is missing" >&2
@@ -80,13 +117,16 @@ if [ "$stale" != "0" ]; then
     echo "       rebuild every lane first: scripts/build-all.sh" >&2
     exit 1
 fi
-echo "binaries: all 12 newer than the newest source (${newest_name#$ROOT/})"
+echo "binaries: all 16 newer than the newest source (${newest_name#$ROOT/})"
 STAGE="$ROOT/build/release"
 OUT="$ROOT/build/EdgeSnap-$VERSION.lha"
 # AROS travels on its own: Aminet has no x86_64 token and the AROS
 # Archives want the platform in the file name, so the same stage is
 # packed twice, once without aros64/ and once with nothing else.
 OUT_AROS="$ROOT/build/EdgeSnap-$VERSION-AROS64.lha"
+# And AROS on the Raspberry Pi has its own: the same AROS stage with the
+# aarch64 build in place of the x86_64 one.
+OUT_ARM="$ROOT/build/EdgeSnap-$VERSION-AROS-aarch64.lha"
 
 rm -rf "$STAGE"
 mkdir -p "$STAGE/EdgeSnap"
@@ -127,6 +167,12 @@ EdgeSnap/aros64/edgesnap.library
 EdgeSnap/aros64/esnaptest
 EdgeSnap/aros64/EdgeSnapPrefs
 EdgeSnap/aros64/EdgeSnapPrefs.info
+EdgeSnap/aarch64/EdgeSnap
+EdgeSnap/aarch64/EdgeSnap.info
+EdgeSnap/aarch64/edgesnap.library
+EdgeSnap/aarch64/esnaptest
+EdgeSnap/aarch64/EdgeSnapPrefs
+EdgeSnap/aarch64/EdgeSnapPrefs.info
 "
 missing=0
 for f in $MANIFEST; do
@@ -183,9 +229,11 @@ pack_one() {
 
 MAIN="$ROOT/build/release-main"
 AROS="$ROOT/build/release-aros"
-rm -rf "$MAIN" "$AROS"
-cp -R "$STAGE" "$MAIN" && rm -rf "$MAIN/EdgeSnap/aros64"
-cp -R "$STAGE" "$AROS" && rm -rf "$AROS/EdgeSnap/os4" "$AROS/EdgeSnap/mos"
+ARM="$ROOT/build/release-aros-aarch64"
+rm -rf "$MAIN" "$AROS" "$ARM"
+cp -R "$STAGE" "$MAIN" && rm -rf "$MAIN/EdgeSnap/aros64" "$MAIN/EdgeSnap/aarch64"
+cp -R "$STAGE" "$AROS" && rm -rf "$AROS/EdgeSnap/os4" "$AROS/EdgeSnap/mos" "$AROS/EdgeSnap/aarch64"
+cp -R "$STAGE" "$ARM" && rm -rf "$ARM/EdgeSnap/os4" "$ARM/EdgeSnap/mos" "$ARM/EdgeSnap/aros64"
 # The combined stage names all three lanes; each archive names only
 # what it contains. Aminet's i386-aros filing workaround belongs in its
 # channel readme, not in the package's actual architecture declaration.
@@ -201,6 +249,7 @@ package_readme() {
 }
 package_readme 'ppc-amigaos >= 4.0.0; ppc-morphos' "$MAIN"
 package_readme 'x86_64-aros' "$AROS"
+package_readme 'aarch64-aros' "$ARM"
 # The AROS archive carries icons in AROS's own PNG format in place of
 # the classic Workbench ones, which AROS's icon.library reads badly:
 # one sent the Installer into an illegal access, another had Wanderer
@@ -211,7 +260,21 @@ cp "$ROOT/assets/aros/EdgeSnapDrawer.info"   "$AROS/EdgeSnap.info"
 cp "$ROOT/assets/aros/Install.info"          "$AROS/EdgeSnap/Install.info"
 cp "$ROOT/assets/aros/EdgeSnap.guide.info"   "$AROS/EdgeSnap/EdgeSnap.guide.info"
 cp "$ROOT/assets/aros/EdgeSnap.readme.info"  "$AROS/EdgeSnap/EdgeSnap.readme.info"
+# Double-clicked, AROS's Installer looks for its script in the tooltypes
+# of its own icon and finds none ("No SCRIPT ToolType in Icon", first
+# seen on a Raspberry Pi 400): it reads them from sm_ArgList[0], the
+# tool, not from the Install icon. So on AROS the Installer script is
+# Install.script, and Install is a Shell script that IconX runs in the
+# package's drawer, handing the Installer its script on the command line.
+mv "$AROS/EdgeSnap/Install" "$AROS/EdgeSnap/Install.script"
+cp "$ROOT/installer/Install-aros" "$AROS/EdgeSnap/Install"
+for f in EdgeSnap.info EdgeSnap/Install.info EdgeSnap/EdgeSnap.guide.info EdgeSnap/EdgeSnap.readme.info; do
+    cp "$AROS/$f" "$ARM/$f"
+done
+mv "$ARM/EdgeSnap/Install" "$ARM/EdgeSnap/Install.script"
+cp "$ROOT/installer/Install-aros" "$ARM/EdgeSnap/Install"
 pack_one "$OUT" "$MAIN"
 pack_one "$OUT_AROS" "$AROS"
+pack_one "$OUT_ARM" "$ARM"
 
-ls -l "$OUT" "$OUT_AROS"
+ls -l "$OUT" "$OUT_AROS" "$OUT_ARM"

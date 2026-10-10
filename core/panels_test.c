@@ -105,6 +105,81 @@ static void test_corner_widget_ignored(void)
     CHECK(ins.b == 0 && ins.r == 0);
 }
 
+/*
+ * Field case, MorphOS, 2026-10-08: an Ambient panel of three icons down
+ * the right edge of a 1920x1080 screen, 48x156 at 1872,205. 156 lines
+ * are under 15% of 1080, so the share alone took it for a corner widget
+ * and windows snapped to the right went over it. Standing along a side
+ * edge at least twice as tall as it is wide, it is a dock.
+ */
+static void test_short_side_docks(void)
+{
+    static const ESRect FHD = { 0, 0, 1920, 1080 };
+    ESRect p[2];
+    ESInsets ins;
+
+    p[0] = rect(1872, 205, 48, 156);   /* the field case, right edge */
+    CHECK(es_panel_classify(&FHD, &p[0]) == ES_PEDGE_RIGHT);
+    CHECK(es_panel_depth(&FHD, &p[0]) == 48);
+
+    p[1] = rect(0, 400, 40, 80);       /* two small icons, left edge */
+    CHECK(es_panel_classify(&FHD, &p[1]) == ES_PEDGE_LEFT);
+
+    es_panel_insets(&FHD, p, 2, ES_PANEL_MARGIN_PX, &ins);
+    CHECK(ins.r == 48 + ES_PANEL_MARGIN_PX);
+    CHECK(ins.l == 40 + ES_PANEL_MARGIN_PX);
+    CHECK(ins.t == 0 && ins.b == 0);
+}
+
+/*
+ * What the side rule leaves alone. A box at a side edge less than twice
+ * as tall as it is wide (one icon, a meter) is not a bar. A strip lying
+ * along the top or the bottom still needs its share of the edge, since
+ * thin and long is also the shape of a tooltip or a label.
+ */
+static void test_short_strips_that_stay_widgets(void)
+{
+    static const ESRect FHD = { 0, 0, 1920, 1080 };
+    ESRect p[1];
+
+    p[0] = rect(1860, 500, 60, 100);   /* side, not twice as tall */
+    CHECK(es_panel_classify(&FHD, &p[0]) == ES_PEDGE_NONE);
+    p[0] = rect(0, 480, 56, 108);      /* one icon and a handle */
+    CHECK(es_panel_classify(&FHD, &p[0]) == ES_PEDGE_NONE);
+    p[0] = rect(800, 980, 200, 20);    /* a tooltip low on the screen */
+    CHECK(es_panel_classify(&FHD, &p[0]) == ES_PEDGE_NONE);
+}
+
+/*
+ * Field case 2, MorphOS, 2026-10-08: a user's dump on a 1680x1050
+ * screen. The glue used to refuse every backdrop window, and Ambient
+ * can keep a panel behind the windows: the dock down the right edge,
+ * 48x540 at 1630,23, never reached this module. The glue now passes
+ * backdrop windows on, which leaves the desktop's own backdrop window
+ * to the geometry: it covers the screen, and is no panel on any of the
+ * three systems.
+ */
+static void test_backdrop_panels_and_desktops(void)
+{
+    static const ESRect SXGA = { 0, 0, 1680, 1050 };
+    static const ESRect FHD = { 0, 0, 1920, 1080 };
+    static const ESRect XGA = { 0, 0, 1024, 768 };
+    ESRect p[1];
+
+    p[0] = rect(1630, 23, 48, 540);        /* the user's right dock */
+    CHECK(es_panel_classify(&SXGA, &p[0]) == ES_PEDGE_RIGHT);
+    CHECK(es_panel_depth(&SXGA, &p[0]) == 50);
+    p[0] = rect(0, 1018, 392, 32);         /* the small bottom panel */
+    CHECK(es_panel_classify(&SXGA, &p[0]) == ES_PEDGE_BOTTOM);
+
+    p[0] = rect(0, 24, 1680, 1026);        /* Ambient's desktop */
+    CHECK(es_panel_classify(&SXGA, &p[0]) == ES_PEDGE_NONE);
+    p[0] = rect(0, 33, 1920, 1047);        /* the Workbench on OS4 */
+    CHECK(es_panel_classify(&FHD, &p[0]) == ES_PEDGE_NONE);
+    p[0] = rect(0, 20, 1024, 748);         /* Wanderer on AROS */
+    CHECK(es_panel_classify(&XGA, &p[0]) == ES_PEDGE_NONE);
+}
+
 static void test_mid_screen_window_ignored(void)
 {
     ESRect p[1];
@@ -228,6 +303,9 @@ int main(void)
     test_floating_centered_dock();
     test_raised_dock_outer_band();
     test_corner_widget_ignored();
+    test_short_side_docks();
+    test_short_strips_that_stay_widgets();
+    test_backdrop_panels_and_desktops();
     test_mid_screen_window_ignored();
     test_thick_window_ignored();
     test_thin_preview_bar_shape();
