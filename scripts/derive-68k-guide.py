@@ -17,7 +17,7 @@ import sys
 
 PAIRS = [
     # the systems
-    ("Window snapping for AmigaOS 4.x, MorphOS and AROS (x86_64 and aarch64)\n",
+    ("Window snapping for AmigaOS 4.x, MorphOS and AROS (x86_64, aarch64, i386)\n",
      "Window snapping for AmigaOS 3.1 and later, on the 68k\n"),
 
     # what the installer puts where
@@ -33,9 +33,9 @@ icon instead, and Wanderer starts it at every boot: a Run line in
 S:User-Startup would open a console window for it there and keep it
 open. S:User-Startup is not touched.
 
-On AROS for the Raspberry Pi there is no Installer to go through:
-Install does the work itself, as it does on any AROS whose own
-Installer cannot copy files. One requester says what goes where and
+On AROS for the Raspberry Pi and on 32-bit AROS there is no Installer
+to go through: Install does the work itself, as it does on any AROS
+whose own Installer cannot copy files. One requester says what goes where and
 asks; the manual goes to SYS:Documentation, or SYS:Locale/Help where
 there is none; and no settings file is written, since the preferences
 window writes one when you press Save.
@@ -164,8 +164,8 @@ expected. Stop the copy Workbench started first, with
 
     # for programmers
     ("""EdgeSnap is 0.42: a beta, complete in what it does and tested on real
-MorphOS hardware, on a Raspberry Pi 400 with AROS, and on AmigaOS 4 and
-AROS x86_64 under emulation.
+MorphOS hardware, on a Raspberry Pi 400 with AROS, and on AmigaOS 4,
+AROS x86_64 and AROS i386 under emulation.
 @{b}edgesnap.library@{ub} says %%LIBVER%%, and that is not a mistake: a
 """,
      """EdgeSnap is 0.42: a beta, complete in what it does and tested on
@@ -173,7 +173,7 @@ AmigaOS 3.2, on real hardware and under emulation.
 @{b}edgesnap.library@{ub} says %%LIBVER%%, and that is not a mistake: a
 """),
     ("""@{b}esnaptest@{ub}, in this package's drawer for each system (os4, mos,
-aros64 or aarch64), is a small client that opens the library and
+aros64, aarch64 or i386), is a small client that opens the library and
 drives the whole API""",
      """@{b}esnaptest@{ub}, in the m68k drawer of this package, is a small
 client that opens the library and drives the whole API"""),
