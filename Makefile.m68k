@@ -33,9 +33,13 @@ OUT := build/m68k
 GEN := $(OUT)/include
 
 # ES_ENGINE_PUSH_PX=0: no guessing that a pinned pointer is at the
-# edge. Where windows are dragged as an outline, a hand's mouse made
-# the zone come and go under a steady push; here windows are let off
-# the screen instead (the preferences and the installer see to it).
+# edge. From AmigaOS 3.2 windows are let off the screen instead (the
+# preferences and the installer see to it). Before 3.2 there is no
+# such setting, and the library turns the push on when it starts
+# (library/edgesnap_body.c).
+# ES_ENGINE_OUTLINE_DRAG=1: Intuition drags a window as an outline and
+# leaves its box where it was until the release, so the push asks
+# whether the outline is flush with an edge, not the window.
 # ES_CONFIG_ANIMATE_DEFAULT=0: the glide is off as the settings come.
 # The 68k machines differ too much in speed for one default to suit
 # them, and without a graphics card the redraws of a glide can crawl:
@@ -45,8 +49,8 @@ GEN := $(OUT)/include
 # redraws; here that choice is the user's, made with the setting (on
 # AmiKit for the PiStorm, at 1920x1080, half the snaps were jumping).
 COMMON := -std=gnu89 -Wall -Wextra -O2 -m$(M68K_CPU) -fomit-frame-pointer \
-          -DES_ENGINE_PUSH_PX=0 -DES_CONFIG_ANIMATE_DEFAULT=0 \
-          -DES_GLIDE_MAX_AREA=0 \
+          -DES_ENGINE_PUSH_PX=0 -DES_ENGINE_OUTLINE_DRAG=1 \
+          -DES_CONFIG_ANIMATE_DEFAULT=0 -DES_GLIDE_MAX_AREA=0 \
           -Icore -Iinclude -Ilibrary
 # The runtime is named once: with one gcc call for compiling and
 # linking, naming it in LDFLAGS as well links libnix's startup twice.

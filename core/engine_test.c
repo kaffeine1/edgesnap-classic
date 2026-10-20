@@ -755,6 +755,93 @@ static void test_no_push_when_turned_off(void)
     CHECK(a.do_snap == 0);
 }
 
+/*
+ * An outline drag, as AmigaOS before 3.2 makes it: the window's box
+ * stays at 100,100 until the release, while the outline follows the
+ * pointer and stops flush with the left edge, the pointer pinned 100 px
+ * in. Judging the outline (outline_drag), the push finds the wall and
+ * previews the left half; judging the box, as the other systems do,
+ * the window is not flush and nothing happens.
+ */
+static void test_outline_push_at_the_edge(void)
+{
+    ESEngine e;
+    ESWinFacts f;
+    ESEngineActions a;
+    int w1, i, outline;
+
+    for (outline = 0; outline <= 1; outline++) {
+        es_engine_init(&e, 0);
+        e.cfg.outline_drag = outline;
+        std_facts(&f, &w1);
+        f.bar_h = 20;                /* pressed on the bar, at 200,110 */
+        es_engine_press(&e, 200, 110, &a);
+        es_engine_motion(&e, &f, &a);
+        f.mouse_x = 100;             /* the outline is now at x 0 ...   */
+        f.mouse_y = 240;
+        es_engine_motion(&e, &f, &a);
+        CHECK(a.drag_started == 1 && a.zone == ES_ZONE_NONE);
+        for (i = 0; i < 3; i++) {    /* ... and the pointer stays: push */
+            f.push_x = -10;
+            es_engine_motion(&e, &f, &a);
+        }
+        if (outline) {
+            CHECK(a.zone_changed == 1 && a.zone == ES_ZONE_LEFT);
+            CHECK(a.show_preview == 1 && a.preview_rect.x == 0);
+        } else {
+            CHECK(a.zone == ES_ZONE_NONE && a.show_preview == 0);
+        }
+        es_engine_release(&e, &a);
+        CHECK(a.do_snap == outline);
+    }
+}
+
+/*
+ * The outline short of the edge (the pointer stopped by the hand, not
+ * by a wall) builds nothing; pushed on into the bottom left corner,
+ * with the outline flush with both edges, it gives the quarter.
+ */
+static void test_outline_push_needs_the_outline_flush(void)
+{
+    ESEngine e;
+    ESWinFacts f;
+    ESEngineActions a;
+    int w1, i;
+
+    es_engine_init(&e, 0);
+    e.cfg.outline_drag = 1;
+    std_facts(&f, &w1);
+    f.bar_h = 20;
+    es_engine_press(&e, 200, 110, &a);
+    es_engine_motion(&e, &f, &a);
+    f.mouse_x = 150;                 /* outline at x 50: not flush      */
+    f.mouse_y = 240;
+    es_engine_motion(&e, &f, &a);
+    for (i = 0; i < 5; i++) {
+        f.push_x = -10;
+        es_engine_motion(&e, &f, &a);
+    }
+    CHECK(a.zone == ES_ZONE_NONE && a.show_preview == 0);
+
+    f.mouse_x = 100;                 /* outline at 0,330: its bottom is */
+    f.mouse_y = 340;                 /* the usable area's, 480          */
+    es_engine_motion(&e, &f, &a);
+    for (i = 0; i < 3; i++) {
+        f.push_x = -10;
+        f.push_y = 0;
+        es_engine_motion(&e, &f, &a);
+    }
+    CHECK(a.zone == ES_ZONE_LEFT);
+    for (i = 0; i < 3; i++) {
+        f.push_x = -2;
+        f.push_y = 10;
+        es_engine_motion(&e, &f, &a);
+    }
+    CHECK(a.zone_changed == 1 && a.zone == ES_ZONE_BOTTOM_LEFT);
+    es_engine_release(&e, &a);
+    CHECK(a.do_snap == 1 && a.snap_zone == ES_ZONE_BOTTOM_LEFT);
+}
+
 /* Pushing while the window is NOT at the edge, or pushing the wrong
  * way, changes nothing: only a wall counts. */
 static void test_push_without_a_wall_is_ignored(void)
@@ -833,6 +920,8 @@ int main(void)
     test_drift_does_not_make_a_corner();
     test_push_holds_under_a_shaking_hand();
     test_push_without_a_wall_is_ignored();
+    test_outline_push_at_the_edge();
+    test_outline_push_needs_the_outline_flush();
     test_click_without_drag();
     test_app_moves_window_alone();
     test_no_dragbar_never_drags();

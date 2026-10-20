@@ -48,6 +48,12 @@
  * struct IntuitionBase *. Same alias trick as the frontend. */
 #define ESB_IBASE ((struct IntuitionBase *)IntuitionBase)
 
+#if !defined(__amigaos4__) && !defined(__MORPHOS__) && !defined(__AROS__)
+/* The push the other systems build with (core/engine.c), for AmigaOS
+ * before 3.2: see esb_init(). */
+#define ESB_CLASSIC_OLD_PUSH_PX 24
+#endif
+
 #define ESB_EXCLUDE_SLOTS 16
 
 static struct SignalSemaphore g_sem;
@@ -105,6 +111,18 @@ int esb_init(void)
     }
     InitSemaphore(&g_sem);
     es_config_defaults(&g_cfg);
+#ifdef ESB_CLASSIC_OLD_PUSH_PX
+    /*
+     * The classic lane builds without the push: from AmigaOS 3.2 its
+     * first installation lets windows leave the screen. Before 3.2
+     * there is no such setting, a window dragged against an edge stops
+     * there and holds the pointer back, and the push is the only way
+     * to the edge (2026-10-20).
+     */
+    if (ESB_IBASE->LibNode.lib_Version < 47) {
+        g_cfg.engine.push_px = ESB_CLASSIC_OLD_PUSH_PX;
+    }
+#endif
     es_engine_init(&g_engine, &g_cfg.engine);
     es_registry_init(&g_registry);
     {

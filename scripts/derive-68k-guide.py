@@ -50,8 +50,8 @@ window writes one when you press Save.
 Nothing is written to S:User-Startup: the commodity starts from
 SYS:WBStartup like any other, and the icon's tooltypes are read as
 Workbench starts it. It needs AmigaOS 2.04 or later; it was tested on
-3.2, and it runs on any 68000 or later, with or without a graphics
-card.
+3.2 and 3.1, and it runs on any 68000 or later, with or without a
+graphics card.
 """),
     ("""and nothing for you to type. On the Raspberry Pi the old library cannot
 be let go of yet, so a new one takes over at the next boot. Your
@@ -115,6 +115,12 @@ Changing it makes AmigaOS ask to reset the Workbench screen, naming the
 windows to close first. Close them and press Retry, or press Cancel and
 let it take effect at the next start.
 
+AmigaOS 3.1 and earlier have no such setting: there a window always
+stops at the edge. EdgeSnap counts the mouse's own travel instead.
+Drag the window against the edge, push the mouse on a little further,
+and the frame comes up and stays while you hold. For a corner, push on
+into both edges, towards the corner.
+
 @{b}MCP and windows that move whole@{ub}
 MCP, part of AmiKit, can move and size windows itself, contents and
 all: "Finestre piene: sposta" and "ridimensiona" in its preferences. It
@@ -169,7 +175,8 @@ AROS x86_64 and AROS i386 under emulation.
 @{b}edgesnap.library@{ub} says %%LIBVER%%, and that is not a mistake: a
 """,
      """EdgeSnap is 0.42: a beta, complete in what it does and tested on
-AmigaOS 3.2, on real hardware and under emulation.
+AmigaOS 3.2, on real hardware and under emulation, and on 3.1 under
+emulation.
 @{b}edgesnap.library@{ub} says %%LIBVER%%, and that is not a mistake: a
 """),
     ("""@{b}esnaptest@{ub}, in this package's drawer for each system (os4, mos,

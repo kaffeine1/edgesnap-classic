@@ -13,13 +13,20 @@
 
 /* The mouse's own travel against an edge that pins the pointer counts
  * as the pointer being there after this much of it (es_push_axis); 0
- * turns it off. The classic lane builds with 0 (Makefile.m68k): there a
- * window is dragged as an outline and its box stays where it was until
- * the release, so the push only ever helped a window already flush with
- * the edge, and the first installation lets windows leave the screen
- * instead. */
+ * turns it off. The classic lane builds with 0 (Makefile.m68k): from
+ * AmigaOS 3.2 its first installation lets windows leave the screen
+ * instead, and before 3.2 its library turns the push on at start. */
 #ifndef ES_ENGINE_PUSH_PX
 #define ES_ENGINE_PUSH_PX 24
+#endif
+
+/* 1 where Intuition drags a window as an outline and leaves its box
+ * where it was until the release (the classic lane): the push then asks
+ * whether the outline is flush with an edge, that is the box the drag
+ * started from moved by the pointer's travel since the press. Where the
+ * window itself moves, its box says. */
+#ifndef ES_ENGINE_OUTLINE_DRAG
+#define ES_ENGINE_OUTLINE_DRAG 0
 #endif
 
 static int es_abs(int v)
@@ -42,6 +49,7 @@ void es_engine_config_defaults(ESEngineConfig *cfg)
     cfg->corner_div = 0;
     cfg->drag_min_px = 4;
     cfg->push_px = ES_ENGINE_PUSH_PX;
+    cfg->outline_drag = ES_ENGINE_OUTLINE_DRAG;
     cfg->zones_mask = ES_ZONEMASK_ALL;
 }
 
@@ -251,8 +259,16 @@ void es_engine_motion(ESEngine *e, const ESWinFacts *facts,
         int my = facts->mouse_y;
         const ESRect *u = &facts->usable;
         const ESRect *b = &facts->box;
+        ESRect outline;
         int z, wall;
 
+        if (e->cfg.outline_drag) {
+            /* where the outline is: see ES_ENGINE_OUTLINE_DRAG */
+            outline = e->base_box;
+            outline.x += mx - e->base_mx;
+            outline.y += my - e->base_my;
+            b = &outline;
+        }
         /* a pointer held back by a window that may not leave the
          * screen: see es_push_axis() */
         wall = es_push_axis(&e->push_acc_x, &e->push_wall_x,

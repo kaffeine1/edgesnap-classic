@@ -95,8 +95,8 @@ widely in speed, and without a graphics card a glide can be slow. Turn
 on "Glide into place" in the preferences if yours is quick enough.
 
 This build is for the 68000 and later, on AmigaOS 2.04 or later, with
-or without a graphics card. It was tested on AmigaOS 3.2.3; 3.1 and
-3.1.4 should be fine, and I would like to hear how they do.
+or without a graphics card. It was tested on AmigaOS 3.2.3 and 3.1;
+3.1.4 should be fine, and I would like to hear how it does.
 
 THIS IS A BETA for a few testers. Please write to me about anything
 that looks wrong, with the machine, the system version and what you
@@ -108,12 +108,16 @@ the library in LIBS:, the commodity and its icon in SYS:WBStartup, the
 preferences in SYS:Prefs, the manual where you say. Nothing is written
 to S:User-Startup. Updating is installing again: no reboot needed.
 
-AFTER THE FIRST INSTALLATION, RESTART THE SYSTEM. The installer turns
-on one setting of AmigaOS, "Can Move Off-screen" of the IControl
-preferences, which AmigaOS takes up when it starts: without it a
-dragged window stops at the edge and never snaps. Until the restart the
-hotkeys work and dragging does not. The installer says so, and
+AFTER THE FIRST INSTALLATION ON AMIGAOS 3.2, RESTART THE SYSTEM. The
+installer turns on one setting of AmigaOS, "Can Move Off-screen" of the
+IControl preferences, which AmigaOS takes up when it starts: without it
+a dragged window stops at the edge and never snaps. Until the restart
+the hotkeys work and dragging does not. The installer says so, and
 EdgeSnap's preferences turn the setting back.
+
+AmigaOS 3.1 and earlier have no such setting, and nothing needs a
+restart: there a dragged window stops at the edge, so push the mouse on
+a little further against it and the frame comes up.
 
 A corner is now the corner itself. If you saved EdgeSnap's preferences
 with an earlier version, they may keep the corner size they had then,
