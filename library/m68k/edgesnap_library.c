@@ -50,9 +50,15 @@ LONG ES_LibStart(void)
 /* An argument in the register the ABI names. */
 #define ES_REG(reg, decl) decl __asm(#reg)
 
-struct ExecBase *SysBase;
-struct IntuitionBase *IntuitionBase;
-struct DosLibrary *DOSBase;   /* Delay, for the glide's tick */
+/*
+ * Defined here, with their value: a bare declaration is only a common
+ * symbol, and -lc then brought in libnix's own DOSBase, which starts
+ * at -1 (seen on 2026-10-20). LibOpen opens a base that is still NULL,
+ * so that -1 was never replaced, and the expunge closed it.
+ */
+struct ExecBase *SysBase = NULL;
+struct IntuitionBase *IntuitionBase = NULL;
+struct DosLibrary *DOSBase = NULL;   /* Delay, for the glide's tick */
 
 struct EdgeSnapBase {
     struct Library lib;
