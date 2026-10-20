@@ -1227,6 +1227,7 @@ static struct PreviewFrame {
     int strips;
 #ifdef ES_PF_DIRECT
     int direct;              /* classic: drawn straight into memory */
+    int diagnostic;          /* classic: the hotkey shows without a drag */
     int chunky;              /* classic: ... of a graphics card */
     UBYTE *keep;             /* classic: what each strip was, XOR the accent */
     ULONG keep_at[4];        /* classic: where each strip's part starts */
@@ -1571,13 +1572,14 @@ static void spike_pf_hide(void)
  * taken at startup: its number on a planar screen, its colour in the
  * card's own format on a graphics card.
  *
- * When: the whole of a show or a drop runs inside Forbid and does not
- * wait. On a native screen the blitter is waited for first, so that an
- * outline Intuition has just started is complete before the planes are
- * read; on a card the lock is taken first, which may wait, and nothing
- * is read until it is held. A show is therefore never interleaved with
- * Intuition drawing its outline, and every change is an XOR, so the two
- * compose whatever the order.
+ * When: the pixels and the flag that says they are up change together,
+ * inside Forbid, with nothing between them that can wait. On a native
+ * screen the blitter is waited for first, so that an outline Intuition
+ * has just started is complete before the planes are read; on a card
+ * the lock is taken first, which may wait, and nothing is read until it
+ * is held. A show is therefore never interleaved with Intuition drawing
+ * its outline, and every change is an XOR, so the two compose whatever
+ * the order.
  */
 
 /* Lock a card's bitmap; 0 when it cannot be had as the show saw it. */
@@ -1653,6 +1655,7 @@ static int spike_pf_direct_kind(void)
     return 1;
 }
 
+/* 1 drawn, 0 needs the plain inversion, -1 cancelled by a release. */
 static int spike_pf_direct_show(void)
 {
     ULONG total = 0;
@@ -1700,6 +1703,9 @@ static int spike_pf_direct_show(void)
         return 0;
     }
 
+    if (g_pf.chunky) {
+        handle = spike_pf_lock(&card);
+    }
     Forbid();
     /*
      * The button may have come up since the engine asked for this
@@ -1707,10 +1713,9 @@ static int spike_pf_direct_show(void)
      * frame drawn now would only be taken down by the task, after
      * Intuition has moved the window over it. So: only while it is held.
      */
-    if (!g_shared.held) {
-        /* nothing: ok stays 0 */
+    if (!g_shared.held && !g_pf.diagnostic) {
+        ok = -1;
     } else if (g_pf.chunky) {
-        handle = spike_pf_lock(&card);
         if (handle != NULL) {
             for (i = 0; i < g_pf.strips; i++) {
                 ESRect *st = &g_pf.strip[i];
@@ -1718,7 +1723,6 @@ static int spike_pf_direct_show(void)
                 esf_chunky_show(&card, st->x, st->y, st->w, st->h, g_pf.raw,
                                 g_pf.keep + g_pf.keep_at[i]);
             }
-            es_UnLockBitMap(handle);
             ok = 1;
         }
     } else {
@@ -1732,17 +1736,20 @@ static int spike_pf_direct_show(void)
         }
         ok = 1;
     }
-    if (ok) {
+    if (ok > 0) {
         g_pf.direct = 1;
         g_pf.plain = 0;
         g_pf.drawn = 1;
     }
+    if (handle != NULL) {
+        es_UnLockBitMap(handle);
+    }
     Permit();
 
-    if (!ok) {
+    if (ok <= 0) {
         FreeVec(g_pf.keep);
         g_pf.keep = NULL;
-        return 0;
+        return ok;
     }
     if (g_pf.unlocked && !g_pf.said_unlocked) {
         g_pf.said_unlocked = 1;
@@ -1785,12 +1792,22 @@ static void spike_pf_direct_drop(void)
             g_pf.unlocked = 1;
             return;
         }
+        /*
+         * The lock may have waited, and a wait breaks Forbid: the other
+         * context may have taken the frame down meanwhile, and a second
+         * XOR would paint the accent back.
+         */
+        if (!g_pf.drawn) {
+            es_UnLockBitMap(handle);
+            return;
+        }
         for (i = 0; i < g_pf.strips; i++) {
             ESRect *st = &g_pf.strip[i];
 
             esf_chunky_drop(&card, st->x, st->y, st->w, st->h,
                             g_pf.keep + g_pf.keep_at[i]);
         }
+        g_pf.drawn = 0;
         es_UnLockBitMap(handle);
     } else {
         WaitBlit();
@@ -1937,8 +1954,8 @@ static void spike_pf_show(struct Screen *dragscr, const ESRect *r)
 #else
     spike_pf_free_buffers();   /* a frame the handler took down left them */
 #ifdef ES_PF_DIRECT
-    if (spike_pf_direct_show()) {
-        return;                /* the accent, straight into memory */
+    if (spike_pf_direct_show() != 0) {
+        return;                /* drawn, or the button is already up */
     }
 #endif
     for (i = 0; i < g_pf.strips && !g_pf.shallow; i++) {
@@ -1974,6 +1991,13 @@ static void spike_pf_show(struct Screen *dragscr, const ESRect *r)
         trusted = spike_pf_reads_trusted(&g_pf.strip[0]);
     }
     Forbid();
+#ifdef ES_CLASSIC
+    if (!g_shared.held && !g_pf.diagnostic) {
+        Permit();
+        spike_pf_free_buffers();
+        return;
+    }
+#endif
     g_pf.plain = g_pf.shallow || !trusted;
     for (i = 0; i < g_pf.strips && !g_pf.plain; i++) {
         const ESRect *st = &g_pf.strip[i];
@@ -4241,7 +4265,13 @@ static void spike_handle_hotkey(LONG id)
         box.w = 400;
         box.h = 300;
         if (ps != NULL) {
+#ifdef ES_PF_DIRECT
+            g_pf.diagnostic = 1;
+#endif
             spike_preview_show(ps, &box);
+#ifdef ES_PF_DIRECT
+            g_pf.diagnostic = 0;
+#endif
             spike_log_flush();
             Delay(60L);
             spike_preview_hide();

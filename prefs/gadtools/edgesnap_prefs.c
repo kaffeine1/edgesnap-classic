@@ -675,7 +675,16 @@ static int es_store_offscreen(struct ESPrefs *p, int permanent)
 {
     static struct EasyStruct es;
 
-    if (!p->off_avail || p->off_now == p->off_was) {
+    if (!p->off_avail) {
+        return 1;
+    }
+    if (p->off_now == p->off_was) {
+        /* Save keeps for good what an earlier Use turned on. An
+         * unchanged box never turns it off: the Installer's BOOTONLY
+         * leaves it on in ENVARC: only, until the restart. */
+        if (permanent && p->off_now && eso_query(1) == 0) {
+            return eso_set(1, 0, 1);
+        }
         return 1;
     }
     es.es_StructSize = sizeof(es);

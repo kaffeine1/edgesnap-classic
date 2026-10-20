@@ -12,26 +12,29 @@
 #include "icontrol.h"
 #include "icontrol_offscreen.h"
 
-/* The whole file, or -1 when it is not there, or -2 when it is there
- * and longer than any IControl file. */
+/* The whole file, -1 when it is not there, or -2 for a read error
+ * or a file longer than any IControl file. */
 static int eso_read(const char *name, unsigned char *buf)
 {
     BPTR fh = Open((CONST_STRPTR)name, MODE_OLDFILE);
     LONG n;
 
     if (fh == 0) {
-        return -1;
+        LONG err = IoErr();
+
+        return err == ERROR_OBJECT_NOT_FOUND || err == ERROR_DIR_NOT_FOUND ?
+               -1 : -2;
     }
     n = Read(fh, buf, ES_ICTL_FILE_MAX);
     if (n == ES_ICTL_FILE_MAX) {
         UBYTE more;
 
-        if (Read(fh, &more, 1) == 1) {
+        if (Read(fh, &more, 1) != 0) {
             n = -2;
         }
     }
     Close(fh);
-    return n < 0 && n != -2 ? -1 : (int)n;
+    return n < 0 ? -2 : (int)n;
 }
 
 static int eso_write(const char *name, const unsigned char *buf, int len)

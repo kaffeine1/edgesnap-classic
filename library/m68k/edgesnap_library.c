@@ -113,10 +113,14 @@ static struct Library *LibOpen(ES_REG(d0, ULONG version),
     (void)version;
     if (esb->lib.lib_OpenCnt == 0) {
         /* First client: what the body needs, then the body. */
-        IntuitionBase = (struct IntuitionBase *)
-            OpenLibrary((CONST_STRPTR)"intuition.library", 36);
-        DOSBase = (struct DosLibrary *)
-            OpenLibrary((CONST_STRPTR)"dos.library", 36);
+        if (IntuitionBase == NULL) {
+            IntuitionBase = (struct IntuitionBase *)
+                OpenLibrary((CONST_STRPTR)"intuition.library", 36);
+        }
+        if (DOSBase == NULL) {
+            DOSBase = (struct DosLibrary *)
+                OpenLibrary((CONST_STRPTR)"dos.library", 36);
+        }
         if (IntuitionBase == NULL || DOSBase == NULL || !esb_init()) {
             if (DOSBase != NULL) {
                 CloseLibrary((struct Library *)DOSBase);
