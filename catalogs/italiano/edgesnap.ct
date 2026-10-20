@@ -1,0 +1,252 @@
+## version $VER: edgesnap.catalog 1.0 (20.10.2026)
+## language italiano
+## codeset 0
+;
+MSG_BYPASSQUAL_NONE
+nessuno
+; none
+;
+MSG_BYPASSQUAL_ALT
+alt
+; alt
+;
+MSG_BYPASSQUAL_CTRL
+ctrl
+; ctrl
+;
+MSG_BYPASSQUAL_SHIFT
+shift
+; shift
+;
+MSG_GROUP_ZONES
+Zone
+; Zones
+;
+MSG_ZONES_LABEL
+Bordi e angoli attivi
+; Which corners and edges react
+;
+MSG_ZONES_HELP
+Quali bordi e angoli dello schermo agganciano una finestra.
+; Which screen edges and corners snap a window.
+;
+MSG_BYPASSQUAL_LABEL
+Tasto per ignorare le zone
+; Hold to ignore zones
+;
+MSG_BYPASSQUAL_HELP
+Tasto qualificatore che permette di trascinare una finestra oltre le zone.
+; Qualifier that lets a window be dragged past the zones.
+;
+MSG_CYCLESIZES_LABEL
+Ripeti tasto per un terzo
+; Repeat a hotkey for a third
+;
+MSG_CYCLESIZES_HELP
+Premendo di nuovo la stessa scorciatoia laterale la finestra occupa due terzi dello schermo, poi un terzo, poi di nuovo la metà.
+; Pressing the same side hotkey again gives the window two thirds of the screen, then one third, then a half again.
+;
+MSG_GROUP_SENSITIVITY
+Sensibilità
+; Sensitivity
+;
+MSG_EDGEPX_LABEL
+Distanza dal bordo
+; Edge distance
+;
+MSG_EDGEPX_HELP
+Quanto deve avvicinarsi il puntatore a un bordo, in pixel.
+; How close to an edge the pointer must come, in pixels.
+;
+MSG_CORNERDIV_LABEL
+Ampiezza angoli
+; Corner size
+;
+MSG_CORNERDIV_HELP
+0: solo l'angolo stesso, quando il puntatore vi è spinto dentro. Da 2: una fascia a ogni estremità dei bordi laterali, pari all'altezza utile divisa per questo valore.
+; 0: a corner only where the pointer is pushed into it. From 2: a band at each end of the side edges, the usable height divided by this.
+;
+MSG_DRAGMINPX_LABEL
+Soglia trascinamento
+; Drag threshold
+;
+MSG_DRAGMINPX_HELP
+Quanto deve spostarsi il puntatore prima che il movimento conti come trascinamento.
+; How far the pointer must travel before it counts as a drag.
+;
+MSG_GROUP_LOOK
+Aspetto
+; Look
+;
+MSG_PREVIEW_LABEL
+Mostra cornice di anteprima
+; Show the preview frame
+;
+MSG_PREVIEW_HELP
+Durante il trascinamento mostra il contorno del punto in cui arriverà la finestra.
+; Outline where the window will land while dragging.
+;
+MSG_ANIMATE_LABEL
+Plana in posizione
+; Glide into place
+;
+MSG_ANIMATE_HELP
+Porta la finestra nella sua zona in alcuni passi invece che in uno solo. Ogni passo chiede al programma di ridisegnarsi, quindi su una macchina lenta o con una finestra grande il salto diretto si vede meglio.
+; Move the window to its zone in a few steps instead of one. Every step asks the program to redraw itself, so on a slow machine or with a large window the plain jump looks better.
+;
+MSG_GROUP_DOCKS
+Dock
+; Docks
+;
+MSG_PANELDETECT_LABEL
+Non coprire i dock
+; Keep clear of docks
+;
+MSG_PANELDETECT_HELP
+Rileva dock e pannelli e non li copre mai.
+; Detect docks and panels, and never cover them.
+;
+MSG_PANELMARGIN_LABEL
+Spazio intorno al dock
+; Space around a dock
+;
+MSG_PANELMARGIN_HELP
+Spazio libero lasciato intorno a un dock rilevato, in pixel.
+; Breathing room left around a detected dock, in pixels.
+;
+MSG_GROUP_MARGINS
+Margini
+; Margins
+;
+MSG_MARGINLEFT_LABEL
+Sinistro
+; Left
+;
+MSG_MARGINLEFT_HELP
+Spazio aggiuntivo lasciato libero sul bordo sinistro.
+; Extra space left free at the left edge.
+;
+MSG_MARGINTOP_LABEL
+Superiore
+; Top
+;
+MSG_MARGINTOP_HELP
+Spazio aggiuntivo lasciato libero sul bordo superiore.
+; Extra space left free at the top edge.
+;
+MSG_MARGINRIGHT_LABEL
+Destro
+; Right
+;
+MSG_MARGINRIGHT_HELP
+Spazio aggiuntivo lasciato libero sul bordo destro.
+; Extra space left free at the right edge.
+;
+MSG_MARGINBOTTOM_LABEL
+Inferiore
+; Bottom
+;
+MSG_MARGINBOTTOM_HELP
+Spazio aggiuntivo lasciato libero sul bordo inferiore.
+; Extra space left free at the bottom edge.
+;
+MSG_ZONE_LEFT
+Sinistra
+; Left
+;
+MSG_ZONE_RIGHT
+Destra
+; Right
+;
+MSG_ZONE_TOP_LEFT
+Alto a sinistra
+; Top left
+;
+MSG_ZONE_TOP_RIGHT
+Alto a destra
+; Top right
+;
+MSG_ZONE_BOTTOM_LEFT
+Basso a sinistra
+; Bottom left
+;
+MSG_ZONE_BOTTOM_RIGHT
+Basso a destra
+; Bottom right
+;
+MSG_ZONE_MAXIMIZE
+Massimizza
+; Maximize
+;
+MSG_GROUP_AMIGAOS
+AmigaOS
+; AmigaOS
+;
+MSG_OFFSCREEN_LABEL
+Finestre spostabili fuori dallo schermo:
+; Windows can move off-screen:
+;
+MSG_BUTTON_SAVE
+Salva
+; Save
+;
+MSG_BUTTON_USE
+Usa
+; Use
+;
+MSG_BUTTON_CANCEL
+Annulla
+; Cancel
+;
+MSG_PREFS_TITLE
+Preferenze EdgeSnap
+; EdgeSnap Preferences
+;
+MSG_REQ_OFFSCREEN_SAVE
+\"Finestre spostabili fuori dallo schermo\" è\nun'impostazione di AmigaOS. Per cambiarla, AmigaOS\nchiede ora di reimpostare lo schermo del Workbench\ne indica le finestre da chiudere prima.\n\nChiuderle e riprovare, oppure annullare:\nl'impostazione viene salvata in entrambi i casi\ned entra in vigore al prossimo avvio del sistema.
+; \"Windows can move off-screen\" is a setting of AmigaOS.\nTo change it, AmigaOS now asks to reset the Workbench\nscreen and names the windows to close first.\n\nClose them and press Retry, or press Cancel:\nthe setting is saved either way, and takes\neffect when the system starts again.
+;
+MSG_REQ_OFFSCREEN_USE
+\"Finestre spostabili fuori dallo schermo\" è\nun'impostazione di AmigaOS. Per cambiarla, AmigaOS\nchiede ora di reimpostare lo schermo del Workbench\ne indica le finestre da chiudere prima.\n\nChiuderle e riprovare. Annullando,\nl'impostazione resta com'era.
+; \"Windows can move off-screen\" is a setting of AmigaOS.\nTo change it, AmigaOS now asks to reset the Workbench\nscreen and names the windows to close first.\n\nClose them and press Retry. With Cancel the\nsetting stays as it was.
+;
+MSG_REQ_OFFSCREEN_OK
+OK
+; OK
+;
+MSG_FATAL_TITLE
+EdgeSnap
+; EdgeSnap
+;
+MSG_FATAL_OK
+OK
+; OK
+;
+MSG_FATAL_INIT_CORE
+EdgeSnap non ha potuto inizializzare il proprio nucleo di aggancio.
+; EdgeSnap could not initialise its snapping core.
+;
+MSG_FATAL_OPEN_LIB
+Impossibile aprire edgesnap.library.\n\nDeve trovarsi in LIBS:. Se EdgeSnap è stato installato e il problema persiste, l'installazione non è stata completata.
+; edgesnap.library could not be opened.\n\nIt belongs in LIBS:. If EdgeSnap was installed and this still happens, the installation did not finish.
+;
+MSG_FATAL_OLD_LIB
+edgesnap.library è più vecchia di quella che serve a questo EdgeSnap.\n\nInstallare di nuovo il pacchetto: la libreria in LIBS: va sostituita insieme alla commodity.
+; edgesnap.library is older than this EdgeSnap needs.\n\nInstall the package again: the library in LIBS: must be replaced along with the commodity.
+;
+MSG_FATAL_NO_IFACE
+edgesnap.library è presente ma senza la sua interfaccia principale.\n\nProbabilmente è più vecchia di quella che serve a questo EdgeSnap: installare di nuovo il pacchetto.
+; edgesnap.library is there but has no main interface.\n\nIt is probably an older version than this EdgeSnap needs: install the package again.
+;
+MSG_BROKER_TITLE
+EdgeSnap %s di Michele Dipace
+; EdgeSnap %s by Michele Dipace
+;
+MSG_BROKER_DESCR
+Affianca finestre trascinate ai bordi
+; Drag windows to screen edges to tile them
+;
+MSG_FATAL_BROKER
+EdgeSnap non ha potuto registrarsi presso Commodities.\n\nNon verrà avviato: richiede Exchange e commodities.library.
+; EdgeSnap could not register itself with Commodities.\n\nIt will not run. Exchange and commodities.library are what it needs.
+;

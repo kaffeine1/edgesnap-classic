@@ -1,0 +1,248 @@
+; core/config.c:415 choice 0 of BYPASSQUAL (es_qual_choices)
+MSG_BYPASSQUAL_NONE (1//)
+none
+;
+; core/config.c:415 choice 1 of BYPASSQUAL (es_qual_choices)
+MSG_BYPASSQUAL_ALT (2//)
+alt
+;
+; core/config.c:415 choice 2 of BYPASSQUAL (es_qual_choices)
+MSG_BYPASSQUAL_CTRL (3//)
+ctrl
+;
+; core/config.c:415 choice 3 of BYPASSQUAL (es_qual_choices)
+MSG_BYPASSQUAL_SHIFT (4//)
+shift
+;
+; core/config.c:419, 422, 425 group of ZONES, BYPASSQUAL, CYCLESIZES
+MSG_GROUP_ZONES (5//)
+Zones
+;
+; core/config.c:419 label of ZONES
+MSG_ZONES_LABEL (6//)
+Which corners and edges react
+;
+; core/config.c:420 help of ZONES
+MSG_ZONES_HELP (7//)
+Which screen edges and corners snap a window.
+;
+; core/config.c:422 label of BYPASSQUAL
+MSG_BYPASSQUAL_LABEL (8//)
+Hold to ignore zones
+;
+; core/config.c:423 help of BYPASSQUAL
+MSG_BYPASSQUAL_HELP (9//)
+Qualifier that lets a window be dragged past the zones.
+;
+; core/config.c:425 label of CYCLESIZES
+MSG_CYCLESIZES_LABEL (10//)
+Repeat a hotkey for a third
+;
+; core/config.c:426-427 help of CYCLESIZES
+MSG_CYCLESIZES_HELP (11//)
+Pressing the same side hotkey again gives the window two thirds of the screen, then one third, then a half again.
+;
+; core/config.c:429, 432, 437 group of EDGEPX, CORNERDIV, DRAGMINPX (also prefs/gadtools/edgesnap_prefs.c:226 es_off_after)
+MSG_GROUP_SENSITIVITY (12//)
+Sensitivity
+;
+; core/config.c:429 label of EDGEPX
+MSG_EDGEPX_LABEL (13//)
+Edge distance
+;
+; core/config.c:430 help of EDGEPX
+MSG_EDGEPX_HELP (14//)
+How close to an edge the pointer must come, in pixels.
+;
+; core/config.c:432 label of CORNERDIV
+MSG_CORNERDIV_LABEL (15//)
+Corner size
+;
+; core/config.c:433-435 help of CORNERDIV
+MSG_CORNERDIV_HELP (16//)
+0: a corner only where the pointer is pushed into it. From 2: a band at each end of the side edges, the usable height divided by this.
+;
+; core/config.c:437 label of DRAGMINPX
+MSG_DRAGMINPX_LABEL (17//)
+Drag threshold
+;
+; core/config.c:438 help of DRAGMINPX
+MSG_DRAGMINPX_HELP (18//)
+How far the pointer must travel before it counts as a drag.
+;
+; core/config.c:440, 443 group of PREVIEW, ANIMATE
+MSG_GROUP_LOOK (19//)
+Look
+;
+; core/config.c:440 label of PREVIEW
+MSG_PREVIEW_LABEL (20//)
+Show the preview frame
+;
+; core/config.c:441 help of PREVIEW
+MSG_PREVIEW_HELP (21//)
+Outline where the window will land while dragging.
+;
+; core/config.c:443 label of ANIMATE
+MSG_ANIMATE_LABEL (22//)
+Glide into place
+;
+; core/config.c:444-446 help of ANIMATE
+MSG_ANIMATE_HELP (23//)
+Move the window to its zone in a few steps instead of one. Every step asks the program to redraw itself, so on a slow machine or with a large window the plain jump looks better.
+;
+; core/config.c:448, 451 group of PANELDETECT, PANELMARGIN
+MSG_GROUP_DOCKS (24//)
+Docks
+;
+; core/config.c:448 label of PANELDETECT
+MSG_PANELDETECT_LABEL (25//)
+Keep clear of docks
+;
+; core/config.c:449 help of PANELDETECT
+MSG_PANELDETECT_HELP (26//)
+Detect docks and panels, and never cover them.
+;
+; core/config.c:451 label of PANELMARGIN
+MSG_PANELMARGIN_LABEL (27//)
+Space around a dock
+;
+; core/config.c:452 help of PANELMARGIN
+MSG_PANELMARGIN_HELP (28//)
+Breathing room left around a detected dock, in pixels.
+;
+; core/config.c:454, 457, 460, 463 group of MARGINLEFT, MARGINTOP, MARGINRIGHT, MARGINBOTTOM
+MSG_GROUP_MARGINS (29//)
+Margins
+;
+; core/config.c:454 label of MARGINLEFT
+MSG_MARGINLEFT_LABEL (30//)
+Left
+;
+; core/config.c:455 help of MARGINLEFT
+MSG_MARGINLEFT_HELP (31//)
+Extra space left free at the left edge.
+;
+; core/config.c:457 label of MARGINTOP
+MSG_MARGINTOP_LABEL (32//)
+Top
+;
+; core/config.c:458 help of MARGINTOP
+MSG_MARGINTOP_HELP (33//)
+Extra space left free at the top edge.
+;
+; core/config.c:460 label of MARGINRIGHT
+MSG_MARGINRIGHT_LABEL (34//)
+Right
+;
+; core/config.c:461 help of MARGINRIGHT
+MSG_MARGINRIGHT_HELP (35//)
+Extra space left free at the right edge.
+;
+; core/config.c:463 label of MARGINBOTTOM
+MSG_MARGINBOTTOM_LABEL (36//)
+Bottom
+;
+; core/config.c:464 help of MARGINBOTTOM
+MSG_MARGINBOTTOM_HELP (37//)
+Extra space left free at the bottom edge.
+;
+; prefs/gadtools/edgesnap_prefs.c:77 zone checkbox label 0 (es_zone_label)
+MSG_ZONE_LEFT (38//)
+Left
+;
+; prefs/gadtools/edgesnap_prefs.c:77 zone checkbox label 1 (es_zone_label)
+MSG_ZONE_RIGHT (39//)
+Right
+;
+; prefs/gadtools/edgesnap_prefs.c:78 zone checkbox label 2 (es_zone_label)
+MSG_ZONE_TOP_LEFT (40//)
+Top left
+;
+; prefs/gadtools/edgesnap_prefs.c:78 zone checkbox label 3 (es_zone_label)
+MSG_ZONE_TOP_RIGHT (41//)
+Top right
+;
+; prefs/gadtools/edgesnap_prefs.c:79 zone checkbox label 4 (es_zone_label)
+MSG_ZONE_BOTTOM_LEFT (42//)
+Bottom left
+;
+; prefs/gadtools/edgesnap_prefs.c:79 zone checkbox label 5 (es_zone_label)
+MSG_ZONE_BOTTOM_RIGHT (43//)
+Bottom right
+;
+; prefs/gadtools/edgesnap_prefs.c:80 zone checkbox label 6 (es_zone_label)
+MSG_ZONE_MAXIMIZE (44//)
+Maximize
+;
+; prefs/gadtools/edgesnap_prefs.c:224 AmigaOS group title (es_off_group)
+MSG_GROUP_AMIGAOS (45//)
+AmigaOS
+;
+; prefs/gadtools/edgesnap_prefs.c:225 off-screen checkbox label (es_off_label)
+MSG_OFFSCREEN_LABEL (46//)
+Windows can move off-screen:
+;
+; prefs/gadtools/edgesnap_prefs.c:538 Save button
+MSG_BUTTON_SAVE (47//)
+Save
+;
+; prefs/gadtools/edgesnap_prefs.c:540 Use button
+MSG_BUTTON_USE (48//)
+Use
+;
+; prefs/gadtools/edgesnap_prefs.c:544 Cancel button (also measured at 534)
+MSG_BUTTON_CANCEL (49//)
+Cancel
+;
+; prefs/gadtools/edgesnap_prefs.c:682, 707 off-screen requester title and preferences window title
+MSG_PREFS_TITLE (50//)
+EdgeSnap Preferences
+;
+; prefs/gadtools/edgesnap_prefs.c:684-689 off-screen requester text when saving (permanent)
+MSG_REQ_OFFSCREEN_SAVE (51//)
+\"Windows can move off-screen\" is a setting of AmigaOS.\nTo change it, AmigaOS now asks to reset the Workbench\nscreen and names the windows to close first.\n\nClose them and press Retry, or press Cancel:\nthe setting is saved either way, and takes\neffect when the system starts again.
+;
+; prefs/gadtools/edgesnap_prefs.c:690-694 off-screen requester text when using (session only)
+MSG_REQ_OFFSCREEN_USE (52//)
+\"Windows can move off-screen\" is a setting of AmigaOS.\nTo change it, AmigaOS now asks to reset the Workbench\nscreen and names the windows to close first.\n\nClose them and press Retry. With Cancel the\nsetting stays as it was.
+;
+; prefs/gadtools/edgesnap_prefs.c:695 off-screen requester button
+MSG_REQ_OFFSCREEN_OK (53//)
+OK
+;
+; commodity/edgesnap_cx.c:3550 spike_fatal requester title
+MSG_FATAL_TITLE (54//)
+EdgeSnap
+;
+; commodity/edgesnap_cx.c:3552 spike_fatal requester button
+MSG_FATAL_OK (55//)
+OK
+;
+; commodity/edgesnap_cx.c:3563 spike_fatal when esb_init fails (ES_STATIC_CORE)
+MSG_FATAL_INIT_CORE (56//)
+EdgeSnap could not initialise its snapping core.
+;
+; commodity/edgesnap_cx.c:3579-3582 spike_fatal when edgesnap.library cannot be opened
+MSG_FATAL_OPEN_LIB (57//)
+edgesnap.library could not be opened.\n\nIt belongs in LIBS:. If EdgeSnap was installed and this still happens, the installation did not finish.
+;
+; commodity/edgesnap_cx.c:3595-3598 spike_fatal when edgesnap.library revision is too old
+MSG_FATAL_OLD_LIB (58//)
+edgesnap.library is older than this EdgeSnap needs.\n\nInstall the package again: the library in LIBS: must be replaced along with the commodity.
+;
+; commodity/edgesnap_cx.c:3607-3609 spike_fatal when edgesnap.library has no main interface (__amigaos4__)
+MSG_FATAL_NO_IFACE (59//)
+edgesnap.library is there but has no main interface.\n\nIt is probably an older version than this EdgeSnap needs: install the package again.
+;
+; commodity/edgesnap_cx.c:4365 Exchange broker title (nb_Title, joined with ES_VERSION)
+MSG_BROKER_TITLE (60//)
+EdgeSnap %s by Michele Dipace
+;
+; commodity/edgesnap_cx.c:4366 Exchange broker description (nb_Descr)
+MSG_BROKER_DESCR (61//)
+Drag windows to screen edges to tile them
+;
+; commodity/edgesnap_cx.c:4401-4403 spike_fatal when CxBroker fails
+MSG_FATAL_BROKER (62//)
+EdgeSnap could not register itself with Commodities.\n\nIt will not run. Exchange and commodities.library are what it needs.
+;
