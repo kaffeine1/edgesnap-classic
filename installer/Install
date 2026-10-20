@@ -577,7 +577,7 @@
                "    one line in S:User-Startup\n")
            "    " (tackon #guide-dest "EdgeSnap.guide") "\n\n"
            (if (and (= #offscreen 1) (= #system 4))
-               "NOW RESTART THE SYSTEM: then windows can move off-screen.\n"
+               "NOW RESTART THE SYSTEM: drags then reach the edge.\n"
                "The drawer you ran this from can be deleted.\n")
            (if (= #old-preview 1)
                (cat "\nThe copy of the first preview in C: was removed. Its "
