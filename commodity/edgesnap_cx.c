@@ -177,6 +177,7 @@ static void spike_pf_drop_now(void);    /* from the input handler */
  */
 #define ES_PREVIEW_XOR 1
 #define ES_PF_DIRECT 1
+#include <utility/hooks.h>
 #include "frame_bits.h"
 #include "mcp_config.h"
 #include <inline/macros.h>
@@ -1051,9 +1052,17 @@ static void spike_accent_take(struct Screen *scr)
 {
     g_accent.scr = scr;
     g_accent.cm = scr->ViewPort.ColorMap;
-    g_accent.pen = ObtainBestPen(g_accent.cm, 0x22222222UL, 0x88888888UL,
-                                 0xFFFFFFFFUL, OBP_Precision,
-                                 PRECISION_GUI, TAG_DONE);
+#ifdef ES_CLASSIC
+    /* V37 has no pen allocation: borrow the DrawInfo pen below. The
+     * ok flag stays clear, so ReleasePen is never called for it. */
+    g_accent.pen = -1;
+    if (GfxBase->LibNode.lib_Version >= 39)
+#endif
+    {
+        g_accent.pen = ObtainBestPen(g_accent.cm, 0x22222222UL, 0x88888888UL,
+                                     0xFFFFFFFFUL, OBP_Precision,
+                                     PRECISION_GUI, TAG_DONE);
+    }
     if (g_accent.pen != -1) {
         g_accent.ok = 1;
         return;
@@ -1120,7 +1129,11 @@ static void spike_accent_recheck(void)
         g_accent.ok = 0;
         spike_accent_take(scr);
         spike_screen_changed(1);
-    } else if (!g_accent.ok) {
+    } else if (!g_accent.ok
+#ifdef ES_CLASSIC
+               && GfxBase->LibNode.lib_Version >= 39
+#endif
+              ) {
         /* We are on the FILLPEN fallback because ObtainBestPen failed
          * mid-drag. No drag is in flight now: try again. */
         spike_accent_take(scr);
@@ -1309,15 +1322,29 @@ static void spike_pf_accent_bytes(void)
     if (g_pf.scr == NULL) {
         return;
     }
-    GetRGB32(g_pf.scr->ViewPort.ColorMap, (ULONG)g_pf.pen, 1, rgb);
+#ifdef ES_CLASSIC
+    if (GfxBase->LibNode.lib_Version < 39) {
+        ULONG rgb4 = GetRGB4(g_pf.scr->ViewPort.ColorMap, (ULONG)g_pf.pen);
+
+        /* V37 returns four bits per component. Repeat them to fill the
+         * same 32-bit components that GetRGB32 returns on V39. */
+        rgb[0] = ((rgb4 >> 8) & 15UL) * 0x11111111UL;
+        rgb[1] = ((rgb4 >> 4) & 15UL) * 0x11111111UL;
+        rgb[2] = (rgb4 & 15UL) * 0x11111111UL;
+    } else
+#endif
+    {
+        GetRGB32(g_pf.scr->ViewPort.ColorMap, (ULONG)g_pf.pen, 1, rgb);
+    }
     g_pf.accent[0] = 0xFF;
     g_pf.accent[1] = (UBYTE)(rgb[0] >> 24);
     g_pf.accent[2] = (UBYTE)(rgb[1] >> 24);
     g_pf.accent[3] = (UBYTE)(rgb[2] >> 24);
-    /* on 15 and 16 bits a written colour does not read back as itself */
-    g_pf.shallow = GetBitMapAttr(g_pf.scr->RastPort.BitMap, BMA_DEPTH) < 24;
 #ifdef ES_CLASSIC
     g_pf.shallow = 1;            /* no pixel reads here: the plain frame */
+#else
+    /* on 15 and 16 bits a written colour does not read back as itself */
+    g_pf.shallow = GetBitMapAttr(g_pf.scr->RastPort.BitMap, BMA_DEPTH) < 24;
 #endif
     g_pf.trust = -1;             /* a new screen: probe again */
     {
@@ -2286,6 +2313,23 @@ static struct Screen *g_divider_scr;   /* blind drag: where the pointer is read 
  * the pointer comes to it. */
 static int g_divider_hot;
 
+#ifdef ES_CLASSIC
+/* LAYERS_NOBACKFILL is only understood from V39. A real hook which
+ * does nothing leaves the seam transparent on V37 as well. It reads
+ * no arguments, so the hook's register arguments need no stack stub. */
+static ULONG spike_divider_no_backfill(void)
+{
+    return 0;
+}
+
+static struct Hook g_divider_backfill = {
+    { NULL, NULL }, spike_divider_no_backfill, NULL, NULL
+};
+#define ES_DIVIDER_BACKFILL (&g_divider_backfill)
+#else
+#define ES_DIVIDER_BACKFILL LAYERS_NOBACKFILL
+#endif
+
 /* How near the pointer must come for the seam to show itself, and how
  * far it must go for the seam to disappear again. The two differ so a
  * pointer resting on the boundary does not blink. */
@@ -2617,7 +2661,7 @@ static void spike_divider_sync(void)
                                          IDCMP_MOUSEMOVE |
                                          IDCMP_REFRESHWINDOW,
                                WA_Activate, FALSE,
-                               WA_BackFill, (ESTagData)LAYERS_NOBACKFILL,
+                               WA_BackFill, (ESTagData)ES_DIVIDER_BACKFILL,
                                TAG_DONE);
     UnlockPubScreen(NULL, scr);
     if (g_divider == NULL) {
@@ -4292,6 +4336,12 @@ static int spike_open_libs(void)
     /* optional: without it a screen on a graphics card gets the plain
      * inversion, and a native screen needs nothing of it */
     CyberGfxBase = OpenLibrary((CONST_STRPTR)"cybergraphics.library", 40);
+    /* The direct frame needs the lock and unlock vectors at -168 and
+     * -174 too. Do not jump past the table of an older installation. */
+    if (CyberGfxBase != NULL && CyberGfxBase->lib_NegSize < 0xae) {
+        CloseLibrary(CyberGfxBase);
+        CyberGfxBase = NULL;
+    }
 #endif
     CxBase = OpenLibrary((CONST_STRPTR)"commodities.library", 37);
     if (IntuitionBase == NULL || GfxBase == NULL || CxBase == NULL) {

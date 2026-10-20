@@ -370,7 +370,8 @@ static struct Gadget *es_checkbox(struct ESPrefs *p, struct Gadget *prev,
     ng.ng_Flags = (UWORD)flags;
     return CreateGadget(CHECKBOX_KIND, prev, &ng,
                         GTCB_Checked, on ? TRUE : FALSE,
-                        GTCB_Scaled, TRUE,
+                        GadToolsBase->lib_Version >= 39 ?
+                            GTCB_Scaled : TAG_IGNORE, TRUE,
                         TAG_DONE);
 }
 
@@ -905,7 +906,9 @@ int main(int argc, char **argv)
     p.gadh = p.fh + 6;
     p.box_w = 26;                  /* GadTools' checkbox, for topaz 8  */
     p.box_h = 11;
-    if (p.fh > 8) {                /* GTCB_Scaled (V39) follows these  */
+    /* Before V39 the checkbox image has a fixed size, whatever the
+     * font: keep its layout at that size as well as omitting the tag. */
+    if (p.fh > 8 && GadToolsBase->lib_Version >= 39) {
         p.box_w = 26 * p.fh / 8;
         p.box_h = 11 * p.fh / 8;
     }
