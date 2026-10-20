@@ -156,6 +156,11 @@
  *       classic choices kept (no push, a glide whatever the size, the
  *       glide off as the settings come). The number moves so that it
  *       stays above both.
+ *   2.25 - the classic systems only: the push comes back where windows
+ *       may not leave the screen, always before AmigaOS 3.2 and from 3.2
+ *       while its setting for that is off, and it judges the outline a
+ *       classic drag moves, not the window left behind. The library
+ *       opens intuition and dos once, its bases its own.
  */
 #define ES_API_VERSION       2
 /* A client that uses a vector appended after 2.2 must check that the
