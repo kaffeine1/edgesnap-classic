@@ -99,27 +99,28 @@ is held.
      """@{b}Windows that may not leave the screen@{ub}
 AmigaOS 3.2 as installed keeps windows on the screen: one dragged
 against an edge stops there, and the pointer stops with it, where it
-holds the title bar. It never reaches the edge, so a drag never snaps;
-the hotkeys and the selector still do.
+holds the title bar, short of the edge.
 
 So the first time EdgeSnap is installed, the installer turns on the
-setting of AmigaOS that lets windows move off-screen.
+setting of AmigaOS that lets windows move off-screen, and the pointer
+goes on to the edge with them.
 @{b}Restart the system after that first installation@{ub}: AmigaOS
-takes the setting up when it starts, and until then a dragged window
-does not snap. The installer says so as well. It is the box
-@{b}Can Move Off-screen@{ub} in @{b}SYS:Prefs/IControl@{ub}, and
-EdgeSnap's own preferences have it too, as
-@{b}Windows can move off-screen@{ub}: that is where to turn it back.
+takes the setting up when it starts. The installer says so as well.
+It is the box @{b}Can Move Off-screen@{ub} in
+@{b}SYS:Prefs/IControl@{ub}, and EdgeSnap's own preferences have it
+too, as @{b}Windows can move off-screen@{ub}: that is where to turn it
+back.
 
 Changing it makes AmigaOS ask to reset the Workbench screen, naming the
 windows to close first. Close them and press Retry, or press Cancel and
 let it take effect at the next start.
 
-AmigaOS 3.1 and earlier have no such setting: there a window always
-stops at the edge. EdgeSnap counts the mouse's own travel instead.
-Drag the window against the edge, push the mouse on a little further,
-and the frame comes up and stays while you hold. For a corner, push on
-into both edges, towards the corner.
+Where windows stop at the edge, until that restart, with the setting
+turned off, and on AmigaOS 3.1 and earlier, which do not have it,
+EdgeSnap counts the mouse's own travel instead. Drag the window against
+the edge, push the mouse on a little further, and the frame comes up
+and stays while you hold. For a corner, push on into both edges,
+towards the corner.
 
 @{b}MCP and windows that move whole@{ub}
 MCP, part of AmiKit, can move and size windows itself, contents and

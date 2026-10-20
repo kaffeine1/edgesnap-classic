@@ -15,7 +15,7 @@
  * as the pointer being there after this much of it (es_push_axis); 0
  * turns it off. The classic lane builds with 0 (Makefile.m68k): from
  * AmigaOS 3.2 its first installation lets windows leave the screen
- * instead, and before 3.2 its library turns the push on at start. */
+ * instead, and its library turns the push on while they may not. */
 #ifndef ES_ENGINE_PUSH_PX
 #define ES_ENGINE_PUSH_PX 24
 #endif

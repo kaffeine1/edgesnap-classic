@@ -351,7 +351,8 @@
 ; AmigaOS 3.2 as installed keeps windows on the screen: one dragged
 ; against an edge stops there and holds the pointer back, where it has
 ; the title bar, so the pointer never reaches the edge and a drag
-; never snaps. The setting that lets windows go on is AmigaOS's own,
+; snaps only by pushing on against it. The setting that lets windows
+; go on is AmigaOS's own,
 ; "Can Move Off-screen" in its IControl preferences. The first
 ; installation turns it on, in the archived preferences only: nothing
 ; happens until the system starts again, and no requester about
@@ -534,19 +535,19 @@
 ; every user level: nobody should find a system setting different and
 ; not know who did it, or how to have it back. On the classic systems
 ; the first thing on it is what the user has to do: the setting waits
-; for a restart, and until then the one thing EdgeSnap is installed
-; for, dragging a window to an edge, does nothing. Someone who misses
-; that concludes that EdgeSnap does not work.
+; for a restart, and until then a drag snaps only by pushing on against
+; the edge. Someone who misses that may conclude that EdgeSnap does not
+; work.
 (if (= #offscreen 1)
     (message
       (if (= #system 4)
           (cat "PLEASE RESTART THE SYSTEM when this installation is over.\n\n"
-               "Until then the hotkeys work, and dragging a window to an "
-               "edge does not snap it.\n\n"
                "AmigaOS stops a dragged window at the edge, before the "
                "pointer gets there. EdgeSnap has turned on the setting of "
                "AmigaOS that lets windows move off-screen, and AmigaOS "
                "takes it up when it starts.\n\n"
+               "Until then, drag a window against an edge and push the "
+               "mouse on a little further: the frame comes up.\n\n"
                "To undo it: SYS:Prefs/EdgeSnap, the box "
                "\"Windows can move off-screen\".")
           (cat "One setting of MorphOS was changed.\n\n"
@@ -576,7 +577,7 @@
                "    one line in S:User-Startup\n")
            "    " (tackon #guide-dest "EdgeSnap.guide") "\n\n"
            (if (and (= #offscreen 1) (= #system 4))
-               "NOW RESTART THE SYSTEM: dragging needs it, once.\n"
+               "NOW RESTART THE SYSTEM: then windows can move off-screen.\n"
                "The drawer you ran this from can be deleted.\n")
            (if (= #old-preview 1)
                (cat "\nThe copy of the first preview in C: was removed. Its "

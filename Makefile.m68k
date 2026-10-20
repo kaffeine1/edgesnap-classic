@@ -33,10 +33,11 @@ OUT := build/m68k
 GEN := $(OUT)/include
 
 # ES_ENGINE_PUSH_PX=0: no guessing that a pinned pointer is at the
-# edge. From AmigaOS 3.2 windows are let off the screen instead (the
-# preferences and the installer see to it). Before 3.2 there is no
-# such setting, and the library turns the push on when it starts
-# (library/edgesnap_body.c).
+# edge, as the build comes. From AmigaOS 3.2 windows are let off the
+# screen instead (the preferences and the installer see to it), and the
+# library turns the push on at a press only while they may not leave
+# it: always before 3.2, which has no such setting, and from 3.2 while
+# the setting is off (esb_classic_push_px in library/edgesnap_body.c).
 # ES_ENGINE_OUTLINE_DRAG=1: Intuition drags a window as an outline and
 # leaves its box where it was until the release, so the push asks
 # whether the outline is flush with an edge, not the window.
@@ -66,7 +67,8 @@ LIB_CFLAGS ?= $(COMMON) -fno-builtin -fno-toplevel-reorder \
 
 CORE_SRC := core/zones.c core/panels.c core/engine.c core/registry.c \
             core/config.c core/gutter.c
-BODY_SRC := library/edgesnap_body.c $(CORE_SRC)
+# core/icontrol.c: the body reads AmigaOS's off-screen setting for the push
+BODY_SRC := library/edgesnap_body.c $(CORE_SRC) core/icontrol.c
 # frame_bits.c: the classic preview frame's pixels, host-tested;
 # mcp_config.c: the two lines of MCP's configuration it borrows, too
 CX_SRC := commodity/edgesnap_cx.c commodity/frame_bits.c commodity/mcp_config.c

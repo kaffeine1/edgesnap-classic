@@ -110,14 +110,15 @@ to S:User-Startup. Updating is installing again: no reboot needed.
 
 AFTER THE FIRST INSTALLATION ON AMIGAOS 3.2, RESTART THE SYSTEM. The
 installer turns on one setting of AmigaOS, "Can Move Off-screen" of the
-IControl preferences, which AmigaOS takes up when it starts: without it
-a dragged window stops at the edge and never snaps. Until the restart
-the hotkeys work and dragging does not. The installer says so, and
-EdgeSnap's preferences turn the setting back.
+IControl preferences, which AmigaOS takes up when it starts: with it a
+dragged window goes on past the edge, and the pointer reaches the edge.
+The installer says so, and EdgeSnap's preferences turn the setting
+back.
 
-AmigaOS 3.1 and earlier have no such setting, and nothing needs a
-restart: there a dragged window stops at the edge, so push the mouse on
-a little further against it and the frame comes up.
+Without that setting a dragged window stops at the edge and holds the
+pointer back: until the restart, if you turn the setting off, and on
+AmigaOS 3.1 and earlier, which do not have it. There push the mouse on
+a little further against the edge and the frame comes up.
 
 A corner is now the corner itself. If you saved EdgeSnap's preferences
 with an earlier version, they may keep the corner size they had then,
