@@ -80,6 +80,14 @@ static void es_actions_clear(ESEngineActions *out)
     out->snap_ref = 0;
     out->snap_zone = ES_ZONE_NONE;
     out->snap_rect = out->preview_rect;
+    out->do_drop = 0;
+    out->drop_ref = 0;
+    out->drop_start = out->preview_rect;
+    out->drop_start_x = out->drop_start_y = 0;
+    out->drop_min_px = 0;
+    out->drop_from = out->preview_rect;
+    out->drop_grab_x = out->drop_grab_y = 0;
+    out->drop_x = out->drop_y = 0;
 }
 
 static void es_engine_clear_tracking(ESEngine *e)
@@ -87,8 +95,10 @@ static void es_engine_clear_tracking(ESEngine *e)
     e->button_down = 0;
     e->dragging = 0;
     e->on_bar = 0;
+    e->followed = 0;
     e->press_mx = -1;
     e->press_my = -1;
+    e->press_ref = 0;
     e->candidate = 0;
     e->zone = ES_ZONE_NONE;
     e->push_acc_x = 0;
@@ -189,6 +199,16 @@ void es_engine_press(ESEngine *e, int mx, int my, ESEngineActions *out)
     e->press_my = my;
 }
 
+void es_engine_press_on(ESEngine *e, void *ref, const ESRect *box,
+                        int mx, int my, ESEngineActions *out)
+{
+    es_engine_press(e, mx, my, out);
+    if (ref != 0 && box != 0) {
+        e->press_ref = ref;
+        e->press_box = *box;
+    }
+}
+
 void es_engine_motion(ESEngine *e, const ESWinFacts *facts,
                       ESEngineActions *out)
 {
@@ -220,12 +240,29 @@ void es_engine_motion(ESEngine *e, const ESWinFacts *facts,
          */
         int px = e->press_mx >= 0 ? e->press_mx : facts->mouse_x;
         int py = e->press_my >= 0 ? e->press_my : facts->mouse_y;
+        const ESRect *b;
 
         e->candidate = facts->ref;
-        e->base_box = facts->box;
+        /*
+         * The window that was active at the press, as it stood then
+         * (2.24, es_engine_press_on): the press position and that box
+         * were sampled together. On AmigaOS 4 and MorphOS the window
+         * follows the pointer, and when the press and the first motion
+         * are handled apart a fast pull can have taken it well down
+         * before this sample; the press would then miss its bar.
+         */
+        if (e->press_ref != 0 && facts->ref == e->press_ref) {
+            e->base_box = e->press_box;
+        } else {
+            e->base_box = facts->box;
+        }
+        b = &e->base_box;
         e->base_mx = px;
         e->base_my = py;
         e->dragging = 0;
+        e->followed = 0;
+        e->first_x = facts->box.x;
+        e->first_y = facts->box.y;
         /*
          * Did the press land on the drag bar? Remembered now, because
          * on a system that drags windows as an outline the window box
@@ -236,8 +273,8 @@ void es_engine_motion(ESEngine *e, const ESWinFacts *facts,
          */
         e->on_bar = (facts->flags & ES_WF_DRAGBAR) != 0 &&
                     facts->bar_h > 0 &&
-                    px >= facts->box.x && px < facts->box.x + facts->box.w &&
-                    py >= facts->box.y && py < facts->box.y + facts->bar_h;
+                    px >= b->x && px < b->x + b->w &&
+                    py >= b->y && py < b->y + facts->bar_h;
         return;
     }
 
@@ -261,6 +298,14 @@ void es_engine_motion(ESEngine *e, const ESWinFacts *facts,
         const ESRect *b = &facts->box;
         ESRect outline;
         int z, wall;
+
+        /* Evidence independent of the press: the box moved from its
+         * first sight during a recognised pointer drag. Keep it even
+         * if the box later returns there. A left/top resize can do
+         * this too; es_registry_drag_out refuses its changed size. */
+        if (b->x != e->first_x || b->y != e->first_y) {
+            e->followed = 1;
+        }
 
         if (e->cfg.outline_drag) {
             /* where the outline is: see ES_ENGINE_OUTLINE_DRAG */
@@ -333,8 +378,81 @@ void es_engine_release(ESEngine *e, ESEngineActions *out)
         out->snap_ref = e->candidate;
         out->snap_zone = e->zone;
         out->snap_rect = e->zone_rect;
+    } else if (e->dragging && (e->on_bar || e->followed) &&
+               e->zone == ES_ZONE_NONE &&
+               e->candidate != 0 &&
+               (e->last.flags & ES_WF_SNAPPABLE) != 0) {
+        /*
+         * 2.24: let go outside every zone, a zone switched off
+         * included. From 2.25 a box that followed the pointer also
+         * qualifies, even if a late press or activation missed its
+         * bar. Keep the start box and pointer for the executor,
+         * separate from the box and pointer that supply the grab.
+         */
+        out->do_drop = 1;
+        out->drop_ref = e->candidate;
+        out->drop_start = e->base_box;
+        /* The pointer that the drag detector used, even when the
+         * grab must come from a later sample. With an unknown press,
+         * base_mx/my are the pointer at the candidate's first sight. */
+        out->drop_start_x = e->base_mx;
+        out->drop_start_y = e->base_my;
+        out->drop_min_px = e->cfg.drag_min_px;
+        if (e->on_bar) {
+            out->drop_from = e->base_box;
+            out->drop_grab_x = e->base_mx;
+            out->drop_grab_y = e->base_my;
+        } else {
+            /* The press and base_box failed the bar test. Use the
+             * latest motion's box and pointer, sampled together:
+             * the window lags least as the pointer slows before the
+             * release. The same pair feeds drop_point and unsnap. */
+            out->drop_from = e->last.box;
+            out->drop_grab_x = e->last.mouse_x;
+            out->drop_grab_y = e->last.mouse_y;
+        }
+        out->drop_x = e->last.mouse_x;
+        out->drop_y = e->last.mouse_y;
     }
     es_engine_clear_tracking(e);
+}
+
+/* Unsigned distances also cover coordinates at opposite int limits. */
+static int es_drop_travelled(int sx, int sy, int ex, int ey, int min_px)
+{
+    unsigned int dx = ex >= sx ? (unsigned int)ex - (unsigned int)sx
+                               : (unsigned int)sx - (unsigned int)ex;
+    unsigned int dy = ey >= sy ? (unsigned int)ey - (unsigned int)sy
+                               : (unsigned int)sy - (unsigned int)ey;
+
+    return min_px <= 0 || dx >= (unsigned int)min_px ||
+                         dy >= (unsigned int)min_px;
+}
+
+int es_engine_drop_moved(const ESEngineActions *a, int mx, int my)
+{
+    return es_drop_travelled(a->drop_start_x, a->drop_start_y,
+                             mx, my, a->drop_min_px);
+}
+
+void es_engine_drop_point(const ESEngineActions *a, const ESRect *live,
+                           int mx, int my,
+                           int *px, int *py)
+{
+    if (!es_drop_travelled(a->drop_start.x, a->drop_start.y,
+                           live->x, live->y, a->drop_min_px) &&
+        es_engine_drop_moved(a, mx, my)) {
+        /* A full-height window kept on screen may not move at all.
+         * Its box cannot locate the drop, so use the pointer sampled
+         * with it. When the box did follow, keep the grab offset:
+         * a pointer read after release can be anywhere a fling took
+         * it, whereas the box stays where the drag left it. */
+        *px = mx;
+        *py = my;
+    } else {
+        *px = live->x + (a->drop_grab_x - a->drop_from.x);
+        *py = live->y + (a->drop_grab_y - a->drop_from.y);
+    }
 }
 
 void es_engine_reset(ESEngine *e, ESEngineActions *out)

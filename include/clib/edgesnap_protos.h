@@ -49,5 +49,8 @@ LONG ESnap_GroupAddWindow(ULONG group, struct Window *win);
 LONG ESnap_GroupRemoveWindow(ULONG group, struct Window *win);
 LONG ESnap_QueryGroupOf(struct Window *win, ULONG *group_out);
 LONG ESnap_SetGroupOptionsA(ULONG group, const struct TagItem *tags);
+LONG ESnap_QueryDividers(ULONG group, struct ESnapDividerInfo *buf, ULONG count, ULONG *needed);
+LONG ESnap_MoveDividerT(ULONG token, LONG position, ULONG flags, LONG *applied);
+LONG ESnap_QueryDividerWindows(ULONG token, ULONG *serials, ULONG count, ULONG *needed);
 
 #endif /* CLIB_EDGESNAP_PROTOS_H */

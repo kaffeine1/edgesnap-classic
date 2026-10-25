@@ -152,15 +152,33 @@
  *       On the classic systems 2.23 was their own: the other systems'
  *       2.21, with the classic choices kept. The push stays off there,
  *       so the rewritten push changes nothing in use.
- *   2.24 - the classic systems only: the other systems' 2.23, with the
- *       classic choices kept (no push, a glide whatever the size, the
- *       glide off as the settings come). The number moves so that it
- *       stays above both.
- *   2.25 - the classic systems only: the push comes back where windows
- *       may not leave the screen, always before AmigaOS 3.2 and from 3.2
- *       while its setting for that is off, and it judges the outline a
- *       classic drag moves, not the window left behind. The library
- *       opens intuition and dos once, its bases its own.
+ *   2.24 - divider tokens per group: QueryDividers, MoveDividerT and
+ *       QueryDividerWindows appended (item 6 of the tiler's list in
+ *       issue 2). A seam between two windows of a group keeps the
+ *       group's gap, as the header has said since 2.20, and where the
+ *       gap is wider than the thickness asked for, its strip is the
+ *       gap. The divider
+ *       calls of 2.2 and 2.3 look at the front screen only, take in a
+ *       group's windows placed without a registry slot, never report or
+ *       move a seam of a group locked for the caller, and MoveDividerAt
+ *       follows the seam QueryDividerAt last reported to the same task,
+ *       or the one it last moved. A snapped window dragged by its title
+ *       bar and let go outside every zone gets its size from before the
+ *       snap back, under the pointer; ES_OPT_DragRestore (default TRUE)
+ *       turns it off. No vector.
+ *       On the classic systems 2.24 was their own: the other systems'
+ *       2.23, with the classic choices kept (no push, a glide whatever
+ *       the size, the glide off as the settings come).
+ *   2.25 - the fixes from the review of 2.24 (edgesnap.h says, call by
+ *       call, what each one now refuses or clamps). No vector.
+ *       On the classic systems 2.25 was their own: the push came back
+ *       where windows may not leave the screen, always before AmigaOS
+ *       3.2 and from 3.2 while its setting for that is off, judging the
+ *       outline a classic drag moves, and the library opened intuition
+ *       and dos once, its bases its own.
+ *   2.26 - the classic systems only: the other systems' 2.25, with the
+ *       classic choices and the classic 2.25 kept. The number moves so
+ *       that it stays above both.
  */
 #define ES_API_VERSION       2
 /* A client that uses a vector appended after 2.2 must check that the

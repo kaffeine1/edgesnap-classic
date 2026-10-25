@@ -66,7 +66,7 @@ LIB_CFLAGS ?= $(COMMON) -fno-builtin -fno-toplevel-reorder \
               -fno-tree-loop-distribute-patterns -nostartfiles -nostdlib
 
 CORE_SRC := core/zones.c core/panels.c core/engine.c core/registry.c \
-            core/config.c core/gutter.c
+            core/config.c core/gutter.c core/divtokens.c
 # core/icontrol.c: the body reads AmigaOS's off-screen setting for the push
 BODY_SRC := library/edgesnap_body.c $(CORE_SRC) core/icontrol.c
 # frame_bits.c: the classic preview frame's pixels, host-tested;

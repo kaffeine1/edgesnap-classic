@@ -44,8 +44,8 @@ LONG ES_LibStart(void)
 
 #define ES_LIB_NAME     "edgesnap.library"
 #define ES_LIB_VERSION  2
-#define ES_LIB_REVISION 25
-#define ES_LIB_IDSTRING "edgesnap.library 2.25 (20.10.2026) Michele Dipace\r\n"
+#define ES_LIB_REVISION 26
+#define ES_LIB_IDSTRING "edgesnap.library 2.26 (25.10.2026) Michele Dipace\r\n"
 
 /* An argument in the register the ABI names. */
 #define ES_REG(reg, decl) decl __asm(#reg)
@@ -401,6 +401,31 @@ static LONG G_SetGroupOptionsA(ES_REG(d0, ULONG group),
     return esb_set_group_options(group, tags);
 }
 
+/* --- appended for 2.24 (2.26 here): divider tokens per group --- */
+static LONG G_QueryDividers(ES_REG(d0, ULONG group),
+                            ES_REG(a0, struct ESnapDividerInfo *buf),
+                            ES_REG(d1, ULONG count),
+                            ES_REG(a1, ULONG *needed))
+{
+    return esb_query_dividers(group, buf, count, needed);
+}
+
+static LONG G_MoveDividerT(ES_REG(d0, ULONG token),
+                           ES_REG(d1, LONG position),
+                           ES_REG(d2, ULONG flags),
+                           ES_REG(a0, LONG *applied))
+{
+    return esb_move_divider_t(token, position, flags, applied);
+}
+
+static LONG G_QueryDividerWindows(ES_REG(d0, ULONG token),
+                                  ES_REG(a0, ULONG *serials),
+                                  ES_REG(d1, ULONG count),
+                                  ES_REG(a1, ULONG *needed))
+{
+    return esb_query_divider_windows(token, serials, count, needed);
+}
+
 /* Vector order is the ABI. Append only, never reorder, never remove. */
 static const APTR FuncTable[] = {
     (APTR)LibOpen,
@@ -438,6 +463,9 @@ static const APTR FuncTable[] = {
     (APTR)G_GroupRemoveWindow,
     (APTR)G_QueryGroupOf,
     (APTR)G_SetGroupOptionsA,
+    (APTR)G_QueryDividers,
+    (APTR)G_MoveDividerT,
+    (APTR)G_QueryDividerWindows,
     (APTR)-1
 };
 

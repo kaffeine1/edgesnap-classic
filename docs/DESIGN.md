@@ -137,6 +137,18 @@ input.device -> CxCustom handler -> counters + Signal() -> engine task
                 (copy event facts only)                    (all the logic)
 ```
 
+There is one deliberate exception, on AROS (`spike_pf_drop_now` in
+`commodity/edgesnap_cx.c`, described under 0.3 below): on the button
+release the handler takes the XOR preview frame down itself, ahead of
+Intuition, which in AROS's outline drag moves the window on that very
+event. A frame taken down from the task after the move inverts pixels
+the move has just repainted. Under `Forbid` the masked path reads and
+writes the frame's strips on the screen's `RastPort` with
+`ReadPixelArray` and `WritePixelArray`, and the plain fallback fills
+them with `RectFill` in `COMPLEMENT` mode; the buffers stay for the
+task to free. It is the only exception to this rule, and it may go if I
+find a way to take the frame down from the task without the artefact.
+
 ## Drag detection (no patches)
 
 `IDCMP_CHANGEWINDOW` only reaches the owning app, and `SetFunction()` on
@@ -199,12 +211,17 @@ interfaces). Heuristic instead:
 - One `ChangeWindowBox()` (atomic move+resize, V36+, async). Honor
   Min/Max window limits; clamped rects stay anchored to the zone's outer
   edge. Non-resizable windows: move only, or skip (configurable).
-- Snap registry: pre-snap geometry per window, restored when the window is
-  dragged out of its zone (Windows behavior). Window pointers are NEVER
+- Snap registry: the box a window had before its first snap, kept
+  across re-snaps, and the box the snap gave it. The restore hotkey
+  puts the first one back, and from library 2.24 a drag does too: a
+  snapped window dragged by its title bar and let go outside every zone
+  gets that size back under the pointer, which keeps its share of the
+  title bar's width, as Windows does with a maximised window (see "A
+  snapped window dragged away" under 0.4). Window pointers are NEVER
   trusted: re-validate by walking the screen/window lists under
-  `LockIBase()` before every touch; under the lock only read, release it
-  before calling Intuition. If the app moves/resizes the window itself,
-  its snap state decays.
+  `LockIBase()` before every touch; under the lock only read, release
+  it before calling Intuition. If the app moves/resizes the window
+  itself, its snap state decays.
 
 ## Zone preview (Aero-style)
 
@@ -296,7 +313,9 @@ commodity/  Exchange controller
 - Apps hostile to external resizing (fixed size increments, terminals):
   imperfect result accepted; the API opt-out is the escape valve.
 - Race with Intuition's own drop handling on release (spike question): if
-  real, commit the snap deferred via timer.device.
+  real, commit the snap deferred via timer.device. Not seen for the snap
+  (2026-08-11, below). The drag restore of 2.24 waits for the drop
+  explicitly (see 0.4).
 
 ## Spike findings
 
@@ -420,10 +439,12 @@ never had the frame up over the moving window - verified both ways.
 
 Implemented across the three layers, and now confirmed end to end.
 
-- `core/gutter.c` finds the seam between two snapped windows and works
-  out what dragging it does to both. Host-tested (7 scenarios: vertical
-  and horizontal seams, clamping so neither window can be squeezed
-  away, pairs that only touch by accident, a lone window).
+- `core/gutter.c` finds the seam between two snapped windows (from
+  2.24 also between the windows of a layout group, across the gap
+  they keep: see below) and works out what dragging it does to both.
+  Host-tested (7 scenarios: vertical and horizontal seams, clamping so
+  neither window can be squeezed away, pairs that only touch by
+  accident, a lone window).
 - The library exposes it as API generation 2: `ESnap_QueryDivider` and
   `ESnap_MoveDivider`, with `ES_CAP_GUTTER` in the capability mask.
 - The commodity puts an invisible strip on the seam and reports drags
@@ -1175,6 +1196,208 @@ of this verification.
   free - and measured on real hardware, because in emulation the redraw
   cost is not the real one.
 
+- **A snapped window dragged away gets its size back (done, library
+  2.24, 2026-10-19).** A MorphOS user asked for it, expecting it from
+  Windows: a maximised window pulled down by its title bar comes back
+  at its old size, under the pointer. The snap registry was meant for
+  this from the start and it was never built: up to 2.23 a release
+  outside every zone did nothing, and the restore hotkey then refused
+  the entry, the window having moved beyond the slack, so the old size
+  was lost. Now a window drag let go outside every zone, a zone
+  switched off in `ZONES` included, gives the window the box it had
+  before its first snap, under the pointer:
+  the pointer keeps its share of the bar's width and its depth into
+  the bar, and the box is kept inside the usable area, docks, margins
+  and the window's own limits included.
+
+  It happens at the release, not during the drag as on Windows:
+  AmigaOS 4 holds another program's window operations until the button
+  is up (see "The preview frame on AmigaOS 4"), and AROS drags an
+  outline and moves the window only then. The engine reports the
+  gesture and nothing more, `do_drop` from `es_engine_release` with the
+  box and pointer the drag began from, its threshold, a box and pointer
+  locating the grab, and the last motion's pointer; the registry decides
+  and consumes the entry (`es_registry_drag_out`); the box is
+  `es_unsnap_rect`, next to
+  `es_centre_rect`; the library body does what needs the system.
+
+  The conditions: the window was snapped to a zone (halves, quarters,
+  maximise, centre, a cycled width; never a client's placement,
+  `ES_ZONE_RECT`); it had the snapped size when the drag began and
+  still has it after the drop; the pointer at the decision is at least
+  `DRAGMINPX` from its start in either axis; it is not excluded, and it
+  is in no layout group, locked or not; the bypass key is not held as
+  the button comes up; and `DRAGRESTORE` is on, as it comes.
+  A refusal leaves the registry as it was. A drag brought back within
+  the pointer threshold does nothing and keeps its entry; the restore
+  hotkey retains its own geometry check. I use the engine's threshold
+  here, 4 pixels as it comes, not the registry's 16-pixel allowance for
+  rounded sizes. A 5-pixel pull of a maximised window therefore restores
+  it, while a 3-pixel pull never becomes a drag. The registry compares
+  only the starting and final sizes with the snapped size, with that
+  same rounding allowance, not their positions. So a snapped window
+  moved once with the bypass key held, or while the setting was off,
+  gets its old size at its next plain drag; I think that is right.
+
+  The press carries the box of the window that was active at it
+  (`es_engine_press_on`). On AmigaOS 4 and MorphOS a window pulled down
+  fast can stand 30 pixels lower at the first motion than at the press,
+  and judged from that box a press on its title bar looked like a press
+  below it: the drag still started, the window having moved, but not
+  as a drag by the bar. Where the pressed window becomes active a beat
+  after the press (AROS) the press names the window before it, and the
+  engine judges as it always did.
+
+  From 2.25 I also accept a drag whose window moved from where it was
+  first seen while the pointer was dragged, even if the press was
+  judged off the bar. The press is sampled when the task handles it,
+  and a pointer ahead of a lagging window, or a window activated late,
+  can make that judgement wrong. For this case I take the grab from
+  the latest motion's box and pointer, sampled together: the lag is
+  smallest as the pointer slows before the release. I keep the start
+  box separate (`drop_start`) for the wait, the size check and the
+  placement decision. I keep the gesture's starting pointer separate
+  from this later grab too: it is the `base_mx/my` the engine used to
+  recognise the drag, or the first motion's pointer if the press was
+  unknown. Measuring from the latest grab would lose that travel.
+  AROS's outline drag still uses the bar press and its original grab.
+  A body drag or a right/bottom resize that never moves the box offers
+  no drop. A left/top resize can offer one, but the registry refuses
+  its changed size and keeps the entry.
+
+  Snapping does not change: the host tests drive the same drags, live
+  and outline, into every kind of zone and into none, through both
+  kinds of press, and compare every action.
+
+  When a full-height window is kept on screen, its box may never move
+  down, however far the pointer travels. If the box is still within
+  the drag threshold of its start while the pointer is not, I place
+  the restored window under the pointer read in the same sample as
+  that live box. Where the box did follow the drag, I keep its grab
+  offset instead: a pointer read after release can have gone anywhere
+  a fling took it, but the box stays where the drag left it.
+
+  The decision needs the window where the drop left it, so the library
+  waits for it, in the caller's task and holding no lock: it looks at
+  the window until it has left the box the drag began from, ten ticks
+  at most. In the AROS sources the drag bar answers the release with
+  `GMR_NOREUSE` (`rom/intuition/windowclasses.c`), `GM_GOINACTIVE`
+  follows in the same event (`inputhandler_support.c`), and the drag
+  bar's `GM_GOINACTIVE` makes the outline's final `MoveWindow`, which
+  `DoASyncAction` runs at once when called from the input.device task
+  (`movewindow.c`, `inputhandler_actions.c`): the drop has landed
+  before our task, at priority 0, runs. A `ChangeWindowBox` of ours is
+  queued, and the queue is not handled while a drag or size gadget is
+  active (`HandleIntuiActions`), so nothing we ask for can be overtaken
+  by the drop. The wait is for AmigaOS 4 in its ghost and outline
+  modes, whose drop cannot be seen from outside, and for an AROS on
+  several cores. A window whose box never moves waits the whole fifth
+  of a second; the pointer's travel then decides whether it restores.
+  A drag put back within the pointer threshold is left alone. The
+  restore glides as the restore hotkey does, `ANIMATE` and all, and
+  raises nothing: a drag never changes depth on the Amiga.
+
+  No vector: one tag, `ES_OPT_DragRestore`, and one row in the settings
+  table, from which the preference windows and the manual take it. The
+  report of `ESnap_FeedInput` does not grow, so it does not say that a
+  window got its size back; `ESnap_QueryWindow` answers `ES_ZONE_NONE`
+  for it afterwards. The host tests are in `core/zones_test.c`
+  (`es_unsnap_rect`), `core/registry_test.c` (`es_registry_drag_out`)
+  and `core/engine_test.c` (`do_drop`, `es_engine_press_on`);
+  `esnaptest D` and `DL` give a window to drag away by hand or by a
+  script.
+
+### 0.5
+
+- **Keys the user can change.** On real MorphOS hardware the keymap
+  switch took `ctrl alt space`, the selector's first key, before it
+  could reach EdgeSnap. I changed the default to `ctrl alt z`, but
+  another fixed key would only postpone the same problem. Each action
+  now takes an Exchange input description from the preferences file,
+  Shell arguments or icon tooltypes, with the current eight keys as
+  defaults. `none`, `off` or an empty window field leaves a key unset.
+  The portable parser checks length, printable ASCII and surrounding
+  quotes; `ParseIX` judges the system's syntax. The windows refuse a
+  bad description or two actions with the same parsed key, and the
+  commodity skips and reports either, so one bad key cannot stop it.
+  The judge is not the same everywhere: AmigaOS 4 and MorphOS refuse
+  `ctrl alt nonsense`, while AROS's `ParseIX` takes the first letter
+  of a word it does not know and reads it as `ctrl alt n`
+  (`workbench/libs/commodities/parseix.c`). I leave that to the
+  system: a key it accepts is a key it will deliver.
+
+- **Frontend storage, the same vocabulary.** I keep the thirteen key
+  buffers in `ESHotkeys`, outside `ESConfig`. The library copies an
+  `ESConfig` onto the caller's stack in `esb_set_options`; putting the
+  keys there would charge every client nearly a kilobyte of stack
+  and string handling for something it never uses. `es_prefs_set`,
+  `es_prefs_line` and `es_prefs_write` handle both structures;
+  `es_config_set`, `es_config_line` and `es_config_write` keep their
+  configuration-only vocabulary and output. The table has a text
+  kind, `ES_SET_KEY`, with `es_setting_text` and
+  `es_setting_apply_text`, alongside the integer accessors. Both doors
+  use the parser's validation. No library change or revision.
+
+- **Two pages from the table.** Two extra help lines had already made
+  the Zune window 735 pixels tall on a 768-pixel AROS One screen.
+  I give every table row a page as well as a group: Snapping and
+  Hotkeys become a ReAction clicktab with a page group, or a MUI/Zune
+  Register. The system's off-screen switch stays after the last group
+  on Snapping; Save, Use and Cancel stay below the pages. The width
+  cycle moves beside the side keys on Hotkeys. The manual takes the
+  same page and group headings.
+
+- **Corners and opening the preferences.** I give the four quarters
+  direct key actions, unset as they come, through the existing
+  `ESnap_SnapWindow` zones and the same after-snap path as the halves.
+  Exchange's Show, `CX_POPKEY` (also `POPKEY`, unset by default) and
+  the ARexx port's `PREFS` call one `spike_open_prefs(void)`. It checks
+  that `SYS:Prefs/EdgeSnap` is there, which an asynchronous start could
+  not report, and starts it through `SystemTags` with `SYS_Asynch`,
+  NIL: for input and output and a 64 KB stack, without waiting.
+  MUI's SingleTask/DoubleStart brings an existing window forward;
+  ReAction publishes a named port and a second instance signals it
+  under `Forbid`. Hide does nothing to another program's window.
+
+- **An ARexx port, `EDGESNAP`.** The 1.0 stage asks for a second real
+  client, and a port is the Amiga's own: a script, a dock button or a
+  file manager can now do what the hotkeys do. `SNAP` (the zones by
+  name, `CENTRE` included), `RESTORE`, `QUERY` (the zone as a word in
+  RESULT), `SELECT`, `PREFS`, `ENABLE`, `DISABLE`, `VERSION`, `HELP`
+  and `QUIT`, with a template each read by `ReadArgs`, as a Shell
+  command reads its own. Without `TITLE` a command acts on the active
+  window, which is the Shell's own when the line comes from one, so
+  `TITLE` names another with an AmigaDOS pattern, screens from the
+  front. Nothing new happens in the port: it calls what the hotkeys
+  call, and the library checks the window as it does for them. The
+  codes are ARexx's: 0, 5 for a refusal, 10 for a word it does not
+  know; the secondary result stays 0 (below). Without
+  rexxsyslib.library there is no port and nothing else changes. On
+  MorphOS the system's rexxsyslib is a reimplementation without an
+  interpreter: its `CreateRexxMsg()` leaves the message without the
+  name `IsRexxMsg()` looks for, so that answered no for every command
+  (VM, 2026-10-20). A message as long as a RexxMsg whose action is a
+  command counts as one too. On AROS One the interpreter is
+  `SYS:Rexxc/RX`, not in the Shell's path; its trace shows the codes
+  (`+++ RC=10 +++`) but the variable RC came back empty, or holding
+  the RESULT text, after every command to the port. Zune's own
+  application ports answer the same way as this one
+  (`workbench/libs/muimaster/classes/application.c`), so I take it as
+  that interpreter's reading of the reply, not as ours to change; it
+  is also why a refusal carries no number in the secondary result,
+  which that interpreter read like a string.
+
+- **Live keys without a gap in mouse input.** On a reload I remove
+  and rebuild the key filters, leaving the broker and its CxCustom
+  active so a button release cannot be lost during a drag. Removal
+  uses commodities.library's serialisation with its input handler.
+  Shell arguments and tooltypes are reapplied after the file just as
+  at startup. The startup and reload messages list the keys in force,
+  skipped keys as none. Closing the selector on its own hotkey still
+  uses `HK_SELECT`, independent of the chosen key code. Host checks
+  cover the vocabulary; the five target builds and runtime behaviour
+  still need their own checks.
+
 ### 2.5 - what a tiling client asked for first
 
 The first client beyond the commodity announced itself on 2026-09-04: a
@@ -1220,8 +1443,45 @@ them is the library's to keep the same everywhere; a window's size
 limits are fitted against the area less the margins, so one that has
 to grow still keeps to its margin. The arithmetic is `es_cell_rect` in
 `core/zones.c`, host-tested; esnaptest places its own window in a half
-cell and finds it where it should be, on all three systems. Item 6,
-divider tokens per group, waits for the tiler that would use them.
+cell and finds it where it should be, on all three systems.
+
+Item 6, divider tokens per group, came as revision 2.24 (2026-10-16).
+`ESnap_QueryDividers` lists the seams between the windows of a group,
+each with a token, its limits, the gap it keeps and the first window
+of each side by serial; `ESnap_MoveDividerT` moves the seam a token
+names, and only its windows; `ESnap_QueryDividerWindows` gives the
+serials of all of them. A token names windows, not a line: the seam is
+rebuilt from exactly those windows (`es_seam_by_refs` in
+`core/gutter.c`), so a drag cannot slide over to a seam nobody
+grabbed, and once they stop being that seam the token is retired and
+its value never comes back. The seams are found from the boxes
+EdgeSnap last put the windows in, not from where they stand, because
+`ChangeWindowBox` is asynchronous and a tiler asks right after it
+places; a window EdgeSnap asked to move in the last two seconds is
+never taken for one moved by hand, whatever box it shows on its way.
+
+The same revision makes true what the header has said since 2.20: up
+to 2.23 a seam found its windows through the snap registry alone,
+closed a gap of up to twelve pixels when dragged and was not found
+across a wider one. Now `es_seams_find` finds a group's seams across
+the group's gap and `es_gutter_apply` keeps it. Where the gap is wider
+than the strip a frontend asks for, the strip is the gap itself: a
+handle of ten pixels in the middle of a gap of twenty lit up under a
+pointer it could not be grabbed by, and a press beside it went to
+whatever lay behind the space (found in the AmigaOS 4 VM). The calls
+of 2.2 and 2.3 take in the groups as well, on the front screen only;
+they never offer a seam of a group locked for the caller, and
+`MoveDividerAt` follows the seam `QueryDividerAt` last reported to its
+task rather than whatever seam lies nearest the line. A seam's
+position can lie outside its limits where a window's own size limits
+kept it from filling its cell, so the commodity moves nothing on a
+click without a drag, sends and draws the position clamped, handles a
+seam only on the front screen, and passes the focus by the seam it
+finds under the pointer after the release. The geometry is host-tested
+in `core/gutter_test.c`, the token table and the walk that decides
+whether a point of a seam is covered in `core/divtokens_test.c`;
+esnaptest drives the three calls on windows of its own, and from a
+second task, which a locked group refuses.
 
 ### Before the ABI freeze
 
@@ -1255,6 +1515,9 @@ Four structural changes. Each one moves a public signature, which is why
    wanted something and decides what. A group dies with its client.
    The names the issue mentioned are kept but do nothing yet, and gaps
    per group (item 9) are still to come.*
+   *Gaps and margins per group (item 9) came as library 2.20
+   (2026-10-02), and divider tokens per group (item 6) as 2.24
+   (2026-10-16): both are in the 2.5 section above.*
 2. **Divider tokens.** `QueryDivider` reports one global seam and
    `MoveDivider` takes only a position, then re-finds the first pair it
    can. With more than one work area that does not hold. A token must
@@ -1266,6 +1529,20 @@ Four structural changes. Each one moves a public signature, which is why
    compatibility promise: a 2.x client works on every later 2.x. A
    first cut at the token idea, not the final one - the line is a name
    that survives a drag but not a re-layout.*
+   *Done for the seams of a group, library 2.24 (2026-10-16):
+   `QueryDividers` gives each of them a token, `MoveDividerT` moves
+   the seam a token names and `QueryDividerWindows` names its windows
+   (the 2.5 section above). The rule written here was too strict: a
+   drag changes both windows, so a token that died with any change
+   would not survive its own drag. A token names the windows on each
+   side, survives every move it makes, and is retired once those
+   windows are no longer that seam (one gone or out of the group, or
+   another window of the group joined them across it). A window moved
+   by hand keeps the token but makes `MoveDividerT` answer
+   `ES_ERR_CHANGED` until the tiler places it again. The calls of 2.3,
+   which name a seam by its line, stay for the commodity, which only
+   drags what is under the pointer, and from 2.24 `MoveDividerAt`
+   follows the seam `QueryDividerAt` last reported to its task.*
 3. **Frontend ownership.** The engine, registry, configuration, ignore
    list and enable state are one global set: two frontends would
    overwrite each other, and any client at all can disable the service

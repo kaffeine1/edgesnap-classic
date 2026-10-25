@@ -20,7 +20,7 @@
  *     stale window refs;
  *   - provides hotkeys through the same snap path the future
  *     ESnap_SnapWindow() will use, Exchange integration, and a
- *     window-dump diagnostic (ctrl alt d).
+ *     window-dump diagnostic (ctrl alt d as it comes).
  *
  * Field-proven rules encoded here (see docs/DESIGN.md spike findings):
  * the engine task never blocks on console I/O (buffered log, flushed
@@ -52,6 +52,8 @@
 #include <exec/tasks.h>
 #include <dos/dos.h>       /* RETURN_*, SIGBREAKF_CTRL_C                */
 #include <dos/notify.h>    /* StartNotify: prefs that change while we run */
+#include <dos/dostags.h>   /* SystemTags: the preferences window        */
+#include <dos/rdargs.h>    /* ReadArgs on an ARexx command line         */
 #include <devices/inputevent.h>
 #include <libraries/commodities.h>
 #include <intuition/intuition.h>
@@ -66,12 +68,20 @@
 #include <workbench/startup.h>
 #include <workbench/workbench.h>
 
+#include <rexx/storage.h>  /* the ARexx port: struct RexxMsg, RXCOMM    */
+#include <rexx/errors.h>   /* RC_OK, RC_WARN, RC_ERROR                  */
+
 #include <proto/dos.h>
 #include <proto/exec.h>
 #include <proto/icon.h>
 #include <proto/intuition.h>
 #include <proto/graphics.h>
 #include <proto/commodities.h>
+#ifdef __AROS__
+/* The base as a plain struct Library, as the other two systems have it. */
+#define __REXXSYSLIB_STDLIBBASE__ 1
+#endif
+#include <proto/rexxsyslib.h>
 
 #ifdef __MORPHOS__
 #include <emul/emulregs.h>
@@ -309,11 +319,20 @@ struct GfxBase *GfxBase;
 #endif
 
 struct Library *CxBase;
+/* For the ARexx port only, and not required: without it there is no
+ * port, and everything else works as before. NDK 3.2 declares it as a
+ * struct RxsLib. */
+#ifdef ES_CLASSIC
+struct RxsLib *RexxSysBase;
+#else
+struct Library *RexxSysBase;
+#endif
 
 #ifdef __amigaos4__
 struct IntuitionIFace *IIntuition;
 struct GraphicsIFace *IGraphics;
 struct CommoditiesIFace *ICommodities;
+struct RexxSysIFace *IRexxSys;
 #endif
 
 #ifdef __MORPHOS__
@@ -334,6 +353,12 @@ static const char es_version_cookie[] __attribute__((used)) =
 
 /* ----------------------------------------- input handler <-> main task */
 
+/* How near the pointer must come for the seam to show itself, and how
+ * far it must go for the seam to disappear again. The two differ so a
+ * pointer resting on the boundary does not blink. */
+#define ES_SEAM_SHOW_PX  3
+#define ES_SEAM_HIDE_PX 14
+
 /*
  * Written by the CxCustom action in input.device context, read by the main
  * task. Counters (not flags) so fast press+release pairs are not lost.
@@ -350,7 +375,7 @@ struct SpikeShared {
     ULONG engine_sigmask;
     volatile ULONG presses;
     /* diagnostics: how often the action ran, and which input classes
-     * it saw (index = ie_Class & 15); shown by the ctrl alt d dump */
+     * it saw (index = ie_Class & 15); shown by the window dump */
     volatile ULONG diag_calls;
     volatile ULONG diag_class[16];
     volatile ULONG releases;
@@ -365,11 +390,17 @@ struct SpikeShared {
     volatile ULONG moves;
     volatile ULONG quals;   /* latest qualifier bits seen with the mouse */
     /* the windowless seam (AROS): the task says when the pointer is on
-     * a lit seam and while a seam drag runs; the handler counts the
-     * presses it swallowed on our behalf */
+     * a lit seam, on which screen, and while a seam drag runs; the
+     * handler counts the presses it swallowed on our behalf, and keeps
+     * where the pointer was on that screen at the latest of them,
+     * written before the count that tells the task */
     volatile ULONG seam_hot;
+    struct Screen * volatile seam_scr;
+    volatile LONG seam_left, seam_top, seam_right, seam_bottom;
     volatile ULONG seam_dragging;
     volatile ULONG seam_grabs;
+    volatile WORD seam_press_x;
+    volatile WORD seam_press_y;
     volatile LONG raw_dx;          /* the mouse's own travel, summed  */
     volatile LONG raw_dy;          /* (relative devices only)         */
 };
@@ -410,7 +441,7 @@ static void spike_cx_action(CxMsg *msg, CxObj *obj)
     }
     /* Diagnostics only: which classes reach us. Written so that a port
      * where the mouse speaks another dialect (AROS with a USB tablet,
-     * 2026-09-03) shows its hand in the ctrl alt d dump instead of
+     * 2026-09-03) shows its hand in the window dump instead of
      * leaving 'drag not detected' to be guessed at. */
     g_shared.diag_class[ie->ie_Class & 15]++;
     /*
@@ -437,10 +468,28 @@ static void spike_cx_action(CxMsg *msg, CxObj *obj)
     g_shared.quals = ie->ie_Qualifier;
     if (ie->ie_Code == IECODE_LBUTTON) {
 #ifdef ES_SEAM_NO_WINDOW
-        if (g_shared.seam_hot) {
+        /* Only while the lit seam's screen is in front: with another
+         * one there, nothing has put the line out if the pointer has
+         * not moved since, and the click belongs to that screen. A
+         * few reads and compares, no call; seam_hot first, as the task
+         * sets seam_scr and the lit strip's bounds before it. A late
+         * task must not let a press far from the strip grab the seam. */
+        struct Screen *scr = g_shared.seam_hot ? g_shared.seam_scr : NULL;
+
+        if (scr != NULL && ES_IBASE->FirstScreen == scr &&
+            scr->MouseX >= g_shared.seam_left - ES_SEAM_HIDE_PX &&
+            scr->MouseX <= g_shared.seam_right + ES_SEAM_HIDE_PX &&
+            scr->MouseY >= g_shared.seam_top - ES_SEAM_HIDE_PX &&
+            scr->MouseY <= g_shared.seam_bottom + ES_SEAM_HIDE_PX) {
             /* the seam is ours: a NULL event is one Intuition ignores,
              * so the two windows below never see this click */
             ie->ie_Class = IECLASS_NULL;
+            /* where the press was, which the task may come to only
+             * after the pointer has gone on: two reads, no call, and
+             * before the count, so the task never finds a grab whose
+             * place is not there yet */
+            g_shared.seam_press_x = scr->MouseX;
+            g_shared.seam_press_y = scr->MouseY;
             g_shared.seam_grabs++;
         }
 #endif
@@ -456,8 +505,11 @@ static void spike_cx_action(CxMsg *msg, CxObj *obj)
         /*
          * Ahead of Intuition, which sits lower in the chain and moves
          * the window on this very event: a frame taken down after that
-         * inverts pixels the move has just repainted. Nothing here but
-         * the four rectangle fills Intuition does from this context.
+         * inverts pixels the move has just repainted. The masked path
+         * reads and writes the strips with ReadPixelArray and
+         * WritePixelArray; the plain path fills them, both under Forbid.
+         * This is the one exception to the handler rule, recorded in
+         * docs/DESIGN.md.
          */
         spike_pf_drop_now();
 #endif
@@ -642,6 +694,13 @@ static void spike_out(const char *fmt, ...)
 #define ES_PREFS_ENVARC "ENVARC:EdgeSnap.prefs"
 
 static ESConfig g_cfg;
+static ESHotkeys g_keys;
+static CxObj *g_broker;   /* ours, once CxBroker has given it */
+static struct MsgPort *g_hotkey_port;
+static CxObj *g_hotkey_filter[ES_HOTKEY_COUNT];
+
+static void spike_hotkeys_rebuild(void);
+static void spike_hotkeys_print(void);
 
 /*
  * Kept so the settings can be loaded again while running: a
@@ -724,7 +783,7 @@ static void spike_config_line(const char *line, const char *src)
     if (spike_cx_word(line)) {
         return;
     }
-    rc = es_config_line(&g_cfg, line);
+    rc = es_prefs_line(&g_cfg, &g_keys, line);
 
     if (rc == ES_ERR_UNSUPPORTED) {
         spike_out("edgesnap: %s: unknown setting: %s\n", src, line);
@@ -844,6 +903,7 @@ static void spike_config_load(int argc, char **argv)
     g_argv = argv;
 
     es_config_defaults(&g_cfg);
+    es_hotkeys_defaults(&g_keys);
     if (!spike_config_load_file(ES_PREFS_ENV)) {
         spike_config_load_file(ES_PREFS_ENVARC);
     }
@@ -1828,7 +1888,10 @@ static void spike_pf_direct_drop(void)
  * release event, which on AROS comes before Intuition moves the
  * window. Forbid keeps the two from interleaving: the handler runs in
  * input.device's task, and a task cannot be switched to while another
- * is forbidden. The flag and the drawing change together.
+ * is forbidden. The flag and the drawing change together. The masked
+ * path reads and writes the strips with ReadPixelArray and WritePixelArray;
+ * the plain path fills them, both under Forbid. This is the one exception
+ * to the input handler rule, recorded in docs/DESIGN.md.
  */
 #ifdef ES_PF_DIRECT
 static void spike_pf_direct_drop(void);
@@ -2336,6 +2399,22 @@ static struct Screen *g_divider_scr;   /* blind drag: where the pointer is read 
 /* Is the strip painted right now? It opens invisible and lights up when
  * the pointer comes to it. */
 static int g_divider_hot;
+/*
+ * Where the drag starts on the seam, along the axis the seam moves on,
+ * and whether the pointer has left that coordinate since. On AmigaOS 4
+ * and MorphOS that is the press itself, read from its message. On AROS
+ * it is the press too: the input handler, as it swallows the press,
+ * keeps where the pointer stood on the seam's screen, and the task
+ * takes that with the grab, however late it comes to it, so a drag
+ * whose pointer has come to rest by then is still a drag. A press and
+ * release that never leaves it is a click, not a drag, and moves
+ * nothing: from 2.24 a seam's position may lie outside the limits it
+ * can be dragged to (a window whose size limits kept it from filling
+ * its cell), and a move asked for there would be clamped and would
+ * shift the windows under a click.
+ */
+static int g_divider_press;
+static int g_divider_moved;
 
 #ifdef ES_CLASSIC
 /* LAYERS_NOBACKFILL is only understood from V39. A real hook which
@@ -2360,6 +2439,29 @@ static struct Hook g_divider_backfill = {
 #define ES_SEAM_SHOW_PX  3
 #define ES_SEAM_HIDE_PX 14
 
+/*
+ * Is scr the front screen? From 2.24 the library's divider calls look
+ * at the front screen only, while we read the pointer from the default
+ * public screen. When that one is not in front, a pointer position
+ * would be taken as one on another screen, so we behave as if there
+ * were no seam: no handle, no line, no move. Read under LockIBase like
+ * every other piece of Intuition state here; scr is only compared,
+ * never followed.
+ */
+static int spike_divider_front(const struct Screen *scr)
+{
+    ULONG ilock;
+    int front;
+
+    if (scr == NULL) {
+        return 0;
+    }
+    ilock = LockIBase(0);
+    front = (ES_IBASE->FirstScreen == scr);
+    UnlockIBase(ilock);
+    return front;
+}
+
 static void spike_divider_close(void)
 {
 #ifdef ES_SEAM_NO_WINDOW
@@ -2374,6 +2476,15 @@ static void spike_divider_close(void)
 }
 
 #ifndef ES_SEAM_NO_WINDOW
+/*
+ * The seam the handle stands on, as the last sync found it (present is
+ * 0 when it found none). Its limits clamp a drag: the position sent and
+ * the one kept as the seam's name stay within them, so a pointer that
+ * runs on past a limit cannot come to name a neighbouring seam. Its
+ * windows take the focus when a drag ends.
+ */
+static struct ESnapDivider g_divider_seam;
+
 /*
  * The seam is visible, and it has to be.
  *
@@ -2420,20 +2531,25 @@ static void spike_divider_paint(void)
  * about the press the answer is already "us", and sampling earlier
  * races the activation of whatever the user clicked last. Handing it
  * to the window under the pointer needs no history and cannot be
- * stale: the library validated both windows a moment ago.
+ * stale: the library validated both windows a moment ago, in the sync
+ * that follows the release. The seam is the one that sync kept, the one
+ * at the pointer, which is the one just dragged; not the first seam of
+ * the layout. And the pointer is compared with the seam's position, not
+ * with the edge of its strip.
  */
-static void spike_divider_pass_focus(const struct ESnapDivider *d)
+static void spike_divider_pass_focus(void)
 {
+    const struct ESnapDivider *d = &g_divider_seam;
     struct Window *win;
 
-    if (d == NULL || !d->present || g_divider == NULL) {
+    if (!d->present || g_divider == NULL) {
         return;
     }
     if (d->vertical) {
-        win = (g_divider->WScreen->MouseX < (LONG)d->strip.x) ?
+        win = ((LONG)g_divider->WScreen->MouseX < d->position) ?
             d->windowA : d->windowB;
     } else {
-        win = (g_divider->WScreen->MouseY < (LONG)d->strip.y) ?
+        win = ((LONG)g_divider->WScreen->MouseY < d->position) ?
             d->windowA : d->windowB;
     }
     if (win != NULL) {
@@ -2509,6 +2625,13 @@ static void spike_divider_hover(void)
     if (g_divider_dragging) {
         return;
     }
+    if (g_divider != NULL && !spike_divider_front(g_divider->WScreen)) {
+        /* Another screen has come to the front: no seam here until the
+         * sync finds ours in front again. */
+        g_divider_seam.present = 0;
+        spike_divider_close();
+        return;
+    }
     if (g_divider == NULL) {
         /*
          * No handle: a seam that was covered where the pointer stood
@@ -2534,14 +2657,37 @@ static void spike_divider_hover(void)
         struct Screen *ps = LockPubScreen(NULL);
         struct ESnapDivider q;
         LONG px = 0, py = 0;
+        int front = 0;
 
         if (ps != NULL) {
             px = (LONG)ps->MouseX;
             py = (LONG)ps->MouseY;
+            front = spike_divider_front(ps);
             UnlockPubScreen(NULL, ps);
         }
-        if (ES_CALL(ESnap_QueryDividerAt)(ES_DIVIDER_PX, px, py, &q) !=
+        if (!front ||
+            ES_CALL(ESnap_QueryDividerAt)(ES_DIVIDER_PX, px, py, &q) !=
                 ES_OK || !q.present) {
+            return;
+        }
+        /*
+         * The answer may name another seam, one that lies nearer the
+         * pointer than the handle's own (a corner where two meet). From
+         * 2.24 a move on the handle's line goes to the seam the library
+         * last named to us, so lighting the handle now would let the
+         * drag resize a pair nobody grabbed. The handle goes to that
+         * seam instead, and lights up there on the next move. Two
+         * seams can share a line, never a strip, so the strip is
+         * compared as well.
+         */
+        if (q.vertical != g_divider_seam.vertical ||
+            q.position != g_divider_seam.position ||
+            q.strip.x != g_divider_seam.strip.x ||
+            q.strip.y != g_divider_seam.strip.y ||
+            q.strip.w != g_divider_seam.strip.w ||
+            q.strip.h != g_divider_seam.strip.h) {
+            spike_divider_close();
+            spike_divider_sync();
             return;
         }
         spike_divider_paint();
@@ -2605,19 +2751,25 @@ static void spike_divider_sync(void)
          */
         struct Screen *ps = LockPubScreen(NULL);
         LONG px = 0, py = 0;
-        LONG rc;
+        LONG rc = ES_ERR_UNSUPPORTED;
+        int front = 0;
 
         if (ps != NULL) {
             px = (LONG)ps->MouseX;
             py = (LONG)ps->MouseY;
+            front = spike_divider_front(ps);
             UnlockPubScreen(NULL, ps);
         }
-        rc = ES_CALL(ESnap_QueryDividerAt)(ES_DIVIDER_PX, px, py, &d);
+        if (front) {
+            rc = ES_CALL(ESnap_QueryDividerAt)(ES_DIVIDER_PX, px, py, &d);
+        }
         if (rc != ES_OK || !d.present) {
+            g_divider_seam.present = 0;
             spike_divider_close();
             return;
         }
     }
+    g_divider_seam = d;
     if (g_divider != NULL) {
         /*
          * Moving a painted window drags its paint across the screen,
@@ -2635,6 +2787,7 @@ static void spike_divider_sync(void)
     if (g_divider != NULL) {
         spike_divider_depth(&d);
         g_divider_vertical = (int)d.vertical;
+        g_divider_line = (int)d.position;   /* the seam just named to us */
         return;
     }
 
@@ -2726,6 +2879,7 @@ static void spike_divider_events(void)
     while ((im = (struct IntuiMessage *)GetMsg(port)) != NULL) {
         ULONG cls = im->Class;
         UWORD code = im->Code;
+        LONG mx = (LONG)im->MouseX, my = (LONG)im->MouseY;
         ReplyMsg((struct Message *)im);
 
         if (cls == IDCMP_REFRESHWINDOW) {
@@ -2768,6 +2922,16 @@ static void spike_divider_events(void)
                 }
 #else
                 g_divider_dragging = 1;
+                /*
+                 * Where the button went down, from the message itself:
+                 * the handle has not moved yet, so its window-relative
+                 * reading is exact, and a pointer that has gone on since
+                 * then is already a drag.
+                 */
+                g_divider_press = (int)(g_divider_vertical ?
+                                        g_divider->LeftEdge + mx :
+                                        g_divider->TopEdge + my);
+                g_divider_moved = 0;
                 /* active window: otherwise the moves stop at our edge */
                 ActivateWindow(g_divider);
                 spike_divider_pointer();
@@ -2794,17 +2958,11 @@ static void spike_divider_events(void)
                  * returns before the windows have moved, and asking too
                  * early finds a pair whose geometry does not match yet,
                  * which reads as "no seam" and takes the handle away.
+                 * The focus then goes by the seam that sync kept.
                  */
-                {
-                    struct ESnapDivider d;
-
-                    Delay(10L);
-                    spike_divider_sync();
-                    if (ES_CALL(ESnap_QueryDivider)(ES_DIVIDER_PX, &d) ==
-                            ES_OK && d.present) {
-                        spike_divider_pass_focus(&d);
-                    }
-                }
+                Delay(10L);
+                spike_divider_sync();
+                spike_divider_pass_focus();
                 spike_log_flush();
             }
             if (g_divider == NULL || g_divider->UserPort != port) {
@@ -2823,18 +2981,43 @@ static void spike_divider_events(void)
             LONG pos = g_divider_vertical ?
                 (LONG)g_divider->WScreen->MouseX :
                 (LONG)g_divider->WScreen->MouseY;
-            LONG rc = ES_CALL(ESnap_MoveDividerAt)((LONG)g_divider_vertical,
-                                                   (LONG)g_divider_line,
-                                                   pos);
+            LONG rc = ES_OK;
 
+            if (!spike_divider_front(g_divider->WScreen)) {
+                continue;          /* another screen in front: no seam */
+            }
+            if (pos != (LONG)g_divider_press) {
+                g_divider_moved = 1;
+            }
+            /*
+             * The drag goes from the clamped value: past a limit the
+             * windows stop, and so does the position we send and keep.
+             */
+            if (pos < g_divider_seam.minPosition) {
+                pos = g_divider_seam.minPosition;
+            }
+            if (pos > g_divider_seam.maxPosition) {
+                pos = g_divider_seam.maxPosition;
+            }
+            if (g_divider_moved && pos != (LONG)g_divider_line) {
+                rc = ES_CALL(ESnap_MoveDividerAt)((LONG)g_divider_vertical,
+                                                  (LONG)g_divider_line,
+                                                  pos);
+                if (rc == ES_OK) {
+                    /*
+                     * The seam has moved, so its NAME has changed with
+                     * it: keep the line up to date or the next call
+                     * would be asking for a seam that is no longer
+                     * where it was, and the drag would die a few pixels
+                     * in. The clamped value, never the raw pointer: a
+                     * library before 2.24 takes the seam nearest the
+                     * line, and a pointer that ran on past the limit
+                     * towards the next seam would name that one.
+                     */
+                    g_divider_line = (int)pos;
+                }
+            }
             if (rc == ES_OK) {
-                /*
-                 * The seam has moved, so its NAME has changed with it:
-                 * keep the line up to date or the next call would be
-                 * asking for a seam that is no longer where it was, and
-                 * the drag would die a few pixels in.
-                 */
-                g_divider_line = (int)pos;
                 /*
                  * Follow the POINTER, not the seam. Asking the library
                  * where the seam is now would race the placement it
@@ -2995,6 +3178,7 @@ static struct {
     int track;                 /* during a drag: where the line is   */
     ESRect strip;
     struct Screen *scr;
+    struct Window *wa, *wb;    /* its first windows, for the focus   */
 } g_seam;
 
 /* Is this seam open at (x, y), a point on its strip? */
@@ -3075,6 +3259,11 @@ static void spike_seam_light(int on)
         spike_seam_visible_run(&run);
         spike_sl_show(&run);
         g_seam.hot = 1;
+        g_shared.seam_scr = g_seam.scr;    /* before the handler may look */
+        g_shared.seam_left = run.x;
+        g_shared.seam_top = run.y;
+        g_shared.seam_right = run.x + run.w - 1;
+        g_shared.seam_bottom = run.y + run.h - 1;
         g_shared.seam_hot = 1;
     } else if (!on && g_seam.hot) {
         g_shared.seam_hot = 0;
@@ -3126,6 +3315,15 @@ static void spike_divider_hover(void)
     if (g_divider_dragging) {
         return;
     }
+    if (g_seam.present && !spike_divider_front(g_seam.scr)) {
+        /* Another screen has come to the front: no seam here until a
+         * query finds ours in front again, as the windowed hover does.
+         * A screen that comes forward under a pointer at rest is the
+         * input handler's to notice (spike_cx_action). */
+        spike_seam_light(0);
+        g_seam.present = 0;
+        return;
+    }
     /* Lit, the answer is checked more often: the pointer may slide
      * along the seam onto a part another window covers. */
     if (++moves_since_ask >= (g_seam.hot ? 3u : 6u)) {
@@ -3159,14 +3357,18 @@ static void spike_seam_query(void)
 {
     struct ESnapDivider d;
     struct Screen *ps = LockPubScreen(NULL);
-    LONG px = 0, py = 0, rc;
+    LONG px = 0, py = 0, rc = ES_ERR_UNSUPPORTED;
+    int front = 0;
 
     if (ps != NULL) {
         px = (LONG)ps->MouseX;
         py = (LONG)ps->MouseY;
+        front = spike_divider_front(ps);
         UnlockPubScreen(NULL, ps);
     }
-    rc = ES_CALL(ESnap_QueryDividerAt)(ES_DIVIDER_PX, px, py, &d);
+    if (front) {
+        rc = ES_CALL(ESnap_QueryDividerAt)(ES_DIVIDER_PX, px, py, &d);
+    }
     if (rc != ES_OK || !d.present) {
         spike_seam_light(0);
         g_seam.present = 0;
@@ -3192,6 +3394,8 @@ static void spike_seam_query(void)
     g_seam.strip.w = (int)d.strip.w;
     g_seam.strip.h = (int)d.strip.h;
     g_seam.scr = g_accent.scr != NULL ? g_accent.scr : ps;
+    g_seam.wa = d.windowA;
+    g_seam.wb = d.windowB;
 }
 
 static void spike_divider_sync(void)
@@ -3200,20 +3404,25 @@ static void spike_divider_sync(void)
     spike_divider_hover();
 }
 
-/* After a seam drag the focus goes to the window under the pointer. */
-static void spike_divider_pass_focus(const struct ESnapDivider *d)
+/*
+ * After a seam drag the focus goes to the window under the pointer: of
+ * the seam the query after the release kept (the one at the pointer,
+ * which is the one just dragged, its windows validated a moment ago),
+ * the window on the pointer's side of its position.
+ */
+static void spike_divider_pass_focus(void)
 {
     struct Window *win;
 
-    if (d == NULL || !d->present || g_seam.scr == NULL) {
+    if (!g_seam.present || g_seam.scr == NULL) {
         return;
     }
-    if (d->vertical) {
-        win = (g_seam.scr->MouseX < (LONG)d->strip.x) ? d->windowA
-                                                       : d->windowB;
+    if (g_seam.vertical) {
+        win = ((int)g_seam.scr->MouseX < g_seam.line) ? g_seam.wa
+                                                       : g_seam.wb;
     } else {
-        win = (g_seam.scr->MouseY < (LONG)d->strip.y) ? d->windowA
-                                                       : d->windowB;
+        win = ((int)g_seam.scr->MouseY < g_seam.line) ? g_seam.wa
+                                                       : g_seam.wb;
     }
     if (win != NULL) {
         ActivateWindow(win);
@@ -3308,15 +3517,23 @@ static void spike_engine_step(void)
         if (g_seam.present && !g_divider_dragging) {
             struct ESnapReport rep;
 
-            /* the handler swallowed a press on the lit seam: from here
-             * the drag runs on the counters, and the lit line becomes
-             * the one that follows the pointer */
+            /* the handler swallowed a press on the lit seam, its screen
+             * in front: from here the drag runs on the counters, and
+             * the lit line becomes the one that follows the pointer.
+             * No front check here: the press is gone already, and a
+             * drag that did not start would let its release through
+             * alone. A screen that came forward since is met by the
+             * checks of the drag and of the release. */
             g_seam.hot = 0;
             g_shared.seam_hot = 0;
             g_seam.track = g_seam.line;
             g_divider_scr = g_seam.scr;
             g_divider_vertical = g_seam.vertical;
             g_divider_line = g_seam.line;
+            g_divider_press = g_divider_vertical ?
+                              (int)g_shared.seam_press_x :
+                              (int)g_shared.seam_press_y;
+            g_divider_moved = 0;
             g_divider_dragging = 1;
             g_shared.seam_dragging = 1;
             ES_CALL(ESnap_ResetInput)(&rep);
@@ -3335,17 +3552,25 @@ static void spike_engine_step(void)
          * pointer, and the two windows change once, when the button
          * comes up: one new strip each, which they paint.
          */
-        if (new_move && g_divider_scr != NULL) {
+        if (new_move && g_divider_scr != NULL &&
+            !spike_divider_front(g_divider_scr)) {
+            /* another screen in front: no line, nothing to move */
+            spike_sl_hide();
+            g_seam.track = g_divider_line;
+        } else if (new_move && g_divider_scr != NULL) {
             LONG pos = g_divider_vertical ? (LONG)g_divider_scr->MouseX
                                           : (LONG)g_divider_scr->MouseY;
 
+            if (pos != (LONG)g_divider_press) {
+                g_divider_moved = 1;
+            }
             if (pos < g_seam.min_pos) {
                 pos = g_seam.min_pos;
             }
             if (pos > g_seam.max_pos) {
                 pos = g_seam.max_pos;
             }
-            if ((int)pos != g_seam.track) {
+            if (g_divider_moved && (int)pos != g_seam.track) {
                 ESRect r = g_seam.strip;
 
                 if (g_divider_vertical) {
@@ -3359,12 +3584,13 @@ static void spike_engine_step(void)
             }
         }
         if (new_release) {
-            struct ESnapDivider d;
-
             spike_sl_hide();
             g_divider_dragging = 0;
             g_shared.seam_dragging = 0;
-            if (g_seam.track != g_divider_line) {
+            /* The line moves only once the pointer has, so a click
+             * leaves track on the line and moves nothing. */
+            if (g_seam.track != g_divider_line &&
+                spike_divider_front(g_divider_scr)) {
                 LONG rc = ES_CALL(ESnap_MoveDividerAt)((LONG)g_divider_vertical,
                                                        (LONG)g_divider_line,
                                                        (LONG)g_seam.track);
@@ -3378,10 +3604,7 @@ static void spike_engine_step(void)
              * resized windows may still be repainting. The next real
              * pointer move calls spike_divider_hover() and may light it. */
             spike_seam_query();
-            if (ES_CALL(ESnap_QueryDivider)(ES_DIVIDER_PX, &d) == ES_OK &&
-                d.present) {
-                spike_divider_pass_focus(&d);
-            }
+            spike_divider_pass_focus();
             spike_log_flush();
         }
         return;   /* the engine sits this one out */
@@ -3442,7 +3665,8 @@ static void spike_engine_step(void)
 /* ------------------------------------------------------- diagnostics */
 
 /*
- * ctrl alt d: dump every window of the active screen with geometry,
+ * Window dump (ctrl alt d as it comes): every window of the active
+ * screen with geometry,
  * flags and the panel-policy verdict, plus the resulting usable area.
  * This is the ground-truth probe for tuning dock detection on real
  * systems: collect under LockIBase, print after unlocking.
@@ -3725,7 +3949,7 @@ static void spike_close_edgesnap(void)
  */
 static void spike_push_config(void)
 {
-    struct TagItem tags[16];
+    struct TagItem tags[20];
     int n = 0;
     int corner_div = g_cfg.engine.corner_div;
 
@@ -3767,6 +3991,9 @@ static void spike_push_config(void)
     tags[n++].ti_Data = (ULONG)g_cfg.cycle_sizes;
     tags[n].ti_Tag = ES_OPT_Animate;
     tags[n++].ti_Data = (ULONG)g_cfg.animate;
+    /* 2.24 and later; an older library ignores it, as above */
+    tags[n].ti_Tag = ES_OPT_DragRestore;
+    tags[n++].ti_Data = (ULONG)g_cfg.drag_restore;
     tags[n].ti_Tag = TAG_DONE;
     tags[n].ti_Data = 0;
 
@@ -3797,16 +4024,20 @@ static void spike_config_reload(void)
 {
     spike_config_load(g_argc, g_argv);
     spike_push_config();
+    spike_hotkeys_rebuild();
     spike_out("edgesnap: preferences reloaded: zones %04x, edge %d px, "
               "corner %s, drag %d px,\n",
               (unsigned)g_cfg.engine.zones_mask, g_cfg.engine.edge_px,
               spike_corner_words(), g_cfg.engine.drag_min_px);
     spike_out("edgesnap:        preview %s, panel detect %s (margin %d), "
-              "width cycle %s, glide %s\n",
+              "width cycle %s, glide %s,\n",
               g_cfg.preview ? "on" : "off",
               g_cfg.panel_detect ? "on" : "off", g_cfg.panel_margin,
               g_cfg.cycle_sizes ? "on" : "off",
               g_cfg.animate ? "on" : "off");
+    spike_out("edgesnap:        drag restore %s\n",
+              g_cfg.drag_restore ? "on" : "off");
+    spike_hotkeys_print();
 }
 
 /* ------------------------------------------------------------ commodity */
@@ -3816,27 +4047,192 @@ static void spike_config_reload(void)
 #define HK_SNAP_MAX    3
 #define HK_RESTORE     4
 #define HK_DUMP        5
-#define HK_FRAME       6   /* ctrl alt f: the preview frame, no drag */
-#define HK_CENTRE      7   /* ctrl alt c: its own size, in the middle */
-#define HK_SELECT      8   /* ctrl alt z: the selector, under the pointer */
+#define HK_FRAME       6   /* the preview frame, no drag */
+#define HK_CENTRE      7   /* its own size, in the middle */
+/* The selector's hotkey is ctrl alt z as it comes. It began on ctrl
+ * alt space, but MorphOS's keymap switch took it on real hardware
+ * (2026-09-25). The user can now choose around such conflicts. */
+#define HK_SELECT      8
+#define HK_TOPLEFT     9
+#define HK_TOPRIGHT   10
+#define HK_BOTTOMLEFT 11
+#define HK_BOTTOMRIGHT 12
+#define HK_PREFS      13
 
-static int spike_add_hotkey(CxObj *broker, struct MsgPort *port,
-                            STRPTR descr, LONG id)
+static const struct {
+    const char *name;
+    LONG id;
+} spike_hotkey_action[ES_HOTKEY_COUNT] = {
+    { "HOTKEYLEFT", HK_SNAP_LEFT }, { "HOTKEYRIGHT", HK_SNAP_RIGHT },
+    { "HOTKEYMAX", HK_SNAP_MAX }, { "HOTKEYTOPLEFT", HK_TOPLEFT },
+    { "HOTKEYTOPRIGHT", HK_TOPRIGHT }, { "HOTKEYBOTTOMLEFT", HK_BOTTOMLEFT },
+    { "HOTKEYBOTTOMRIGHT", HK_BOTTOMRIGHT }, { "HOTKEYCENTRE", HK_CENTRE },
+    { "HOTKEYRESTORE", HK_RESTORE }, { "HOTKEYSELECT", HK_SELECT },
+    { "CX_POPKEY", HK_PREFS }, { "HOTKEYDUMP", HK_DUMP },
+    { "HOTKEYFRAME", HK_FRAME }
+};
+
+static CxObj *spike_add_hotkey(STRPTR descr, int index)
 {
-    CxObj *filter;
+    CxObj *filter = CxFilter(descr);
+    CxObj *sender;
+    CxObj *eat;
+    LONG error;
 
-    filter = CxFilter(descr);
     if (filter == NULL) {
-        return 0;
+        spike_out("edgesnap: no memory for hotkey %s\n", (char *)descr);
+        return NULL;
     }
-    AttachCxObj(filter, CxSender(port, id));
-    AttachCxObj(filter, CxTranslate(NULL));
+    error = CxObjError(filter);
+    if (error != 0) {
+        spike_out("edgesnap: skipping %s=%s (%s)\n",
+                  spike_hotkey_action[index].name, (char *)descr,
+                  (error & COERR_BADFILTER) ? "bad input description" :
+                                               "filter error");
+        DeleteCxObjAll(filter);
+        return NULL;
+    }
+    sender = CxSender(g_hotkey_port, spike_hotkey_action[index].id);
+    eat = CxTranslate(NULL);
+    if (sender == NULL || eat == NULL) {
+        if (sender != NULL) { DeleteCxObjAll(sender); }
+        if (eat != NULL) { DeleteCxObjAll(eat); }
+        DeleteCxObjAll(filter);
+        spike_out("edgesnap: no memory for %s=%s\n",
+                  spike_hotkey_action[index].name, (char *)descr);
+        return NULL;
+    }
+    AttachCxObj(filter, sender);
+    AttachCxObj(filter, eat);
     if (CxObjError(filter) != 0) {
         DeleteCxObjAll(filter);
-        return 0;
+        spike_out("edgesnap: could not build %s=%s\n",
+                  spike_hotkey_action[index].name, (char *)descr);
+        return NULL;
     }
-    AttachCxObj(broker, filter);
-    return 1;
+    return filter;
+}
+
+/* Compare the expression's fields, never its structure padding. */
+static int spike_same_key(const struct InputXpression *a,
+                            const struct InputXpression *b)
+{
+    return a->ix_Version == b->ix_Version && a->ix_Class == b->ix_Class &&
+           a->ix_Code == b->ix_Code && a->ix_CodeMask == b->ix_CodeMask &&
+           a->ix_Qualifier == b->ix_Qualifier &&
+           a->ix_QualMask == b->ix_QualMask && a->ix_QualSame == b->ix_QualSame;
+}
+
+static void spike_hotkeys_rebuild(void)
+{
+    struct InputXpression parsed[ES_HOTKEY_COUNT];
+    int i, j;
+
+    /* Remove only the filters. The broker and CxCustom keep seeing
+     * mouse facts, especially a button release during an open drag.
+     * DeleteCxObjAll takes a filter out of the broker's list first,
+     * under the semaphore the commodities input handler holds while it
+     * runs the objects (AROS: removecxobj.c), so it never pulls one out
+     * from under an event in flight. */
+    for (i = 0; i < ES_HOTKEY_COUNT; i++) {
+        if (g_hotkey_filter[i] != NULL) {
+            DeleteCxObjAll(g_hotkey_filter[i]);
+            g_hotkey_filter[i] = NULL;
+        }
+    }
+    memset(parsed, 0, sizeof(parsed));
+    for (i = 0; i < ES_HOTKEY_COUNT; i++) {
+        CxObj *filter;
+        const char *text = g_keys.key[i];
+
+        if (*text == '\0') {
+            continue;
+        }
+        /* Check CxObjError before attaching anything to the broker:
+         * a refused key must never poison the engine's object tree. */
+        filter = spike_add_hotkey((STRPTR)text, i);
+        if (filter == NULL) {
+            continue;
+        }
+        if (ParseIX((STRPTR)text, &parsed[i]) != 0) {
+            spike_out("edgesnap: skipping %s=%s (bad input description)\n",
+                      spike_hotkey_action[i].name, text);
+            DeleteCxObjAll(filter);
+            continue;
+        }
+        /* Qualifier order in the original description is immaterial. */
+        for (j = 0; j < i; j++) {
+            if (g_hotkey_filter[j] != NULL &&
+                spike_same_key(&parsed[i], &parsed[j])) {
+                break;
+            }
+        }
+        if (j < i) {
+            spike_out("edgesnap: skipping %s=%s: same key as %s\n",
+                      spike_hotkey_action[i].name, text,
+                      spike_hotkey_action[j].name);
+            DeleteCxObjAll(filter);
+            continue;
+        }
+        AttachCxObj(g_broker, filter);
+        g_hotkey_filter[i] = filter;
+    }
+}
+
+static void spike_hotkeys_print(void)
+{
+    int i;
+
+    spike_out("edgesnap: hotkeys in force:\n");
+    for (i = 0; i < ES_HOTKEY_COUNT; i++) {
+        /* three to a line, each line indented, "; " between them */
+        spike_out("%s%s=%s%s", (i % 3) == 0 ? "  " : "",
+                  spike_hotkey_action[i].name,
+                  g_hotkey_filter[i] != NULL ? g_keys.key[i] : "none",
+                  (i % 3) == 2 || i == ES_HOTKEY_COUNT - 1 ? "\n" : "; ");
+    }
+}
+
+/*
+ * The preferences window is a program of its own, where the installers
+ * put it on every system: Exchange's Show, the popkey and the ARexx port
+ * all open it here. It is started through the Shell and left to run,
+ * so nothing here waits for it and it reaches us the way any editor of
+ * the file does. A missing program is said, since an asynchronous start
+ * would fail in a Shell nobody sees.
+ */
+static void spike_open_prefs(void)
+{
+    BPTR lock = Lock((STRPTR)"SYS:Prefs/EdgeSnap", ACCESS_READ);
+    BPTR in;
+    BPTR out;
+    LONG rc = -1;
+
+    if (lock == 0) {
+        spike_out("edgesnap: there is no SYS:Prefs/EdgeSnap to open\n");
+        return;
+    }
+    UnLock(lock);
+    in = Open((STRPTR)"NIL:", MODE_OLDFILE);
+    out = Open((STRPTR)"NIL:", MODE_NEWFILE);
+    if (in != 0 && out != 0) {
+        rc = SystemTags((STRPTR)"SYS:Prefs/EdgeSnap",
+                        SYS_Input, in,
+                        SYS_Output, out,
+                        SYS_Asynch, TRUE,
+                        NP_StackSize, 65536,
+                        TAG_DONE);
+    }
+    if (rc == -1) {
+        /* not started: the two handles are still ours */
+        if (in != 0) {
+            Close(in);
+        }
+        if (out != 0) {
+            Close(out);
+        }
+        spike_out("edgesnap: could not start SYS:Prefs/EdgeSnap\n");
+    }
 }
 
 static void spike_divider_sync(void);
@@ -3861,12 +4257,13 @@ static struct Window *spike_active_window(void)
  * three rows, each in the place the window would go: the corners in
  * the corners, the halves at the sides, maximise at the top in the
  * middle (the top edge maximises in a drag too), the centre in the
- * middle, and "put it back" at the bottom, where the cursor-down hotkey
- * lives. Each cell shows a miniature of its zone, drawn by the same
+ * middle, and "put it back" at the bottom. Each cell shows a miniature
+ * of its zone, drawn by the same
  * geometry that places the window, so the picture cannot lie.
  *
- * It opens under the pointer on ctrl alt z, takes the mouse and the
- * cursor keys, and goes away on a choice, on Esc or the right button,
+ * It opens under the pointer on the selector's hotkey (ctrl alt z as
+ * it comes), takes the mouse and cursor keys, and goes away on a
+ * choice, on Esc or the right button,
  * on the hotkey again, or when anything else is activated. Plain
  * Intuition and graphics.library, so it is the same window on all
  * three systems, and the choice goes through the calls the hotkeys
@@ -4231,7 +4628,9 @@ static void spike_after_snap(LONG rc)
     }
 #endif
     spike_divider_sync();
-    spike_log_flush();
+    if (!g_drag_active) {
+        spike_log_flush();    /* the ARexx port can ask during a drag */
+    }
     if (rc != ES_OK) {
         spike_out("edgesnap: hotkey refused (%ld)\n", (long)rc);
     }
@@ -4242,6 +4641,10 @@ static void spike_handle_hotkey(LONG id)
     struct Window *win;
     LONG rc = ES_OK;
 
+    if (id == HK_PREFS) {
+        spike_open_prefs();
+        return;
+    }
     if (id == HK_SELECT) {
         if (g_selector != NULL) {
             spike_sel_close();
@@ -4297,6 +4700,18 @@ static void spike_handle_hotkey(LONG id)
         break;
     case HK_SNAP_MAX:
         rc = ES_CALL(ESnap_SnapWindow)(win, ES_ZONE_MAX);
+        break;
+    case HK_TOPLEFT:
+        rc = ES_CALL(ESnap_SnapWindow)(win, ES_ZONE_TOP_LEFT);
+        break;
+    case HK_TOPRIGHT:
+        rc = ES_CALL(ESnap_SnapWindow)(win, ES_ZONE_TOP_RIGHT);
+        break;
+    case HK_BOTTOMLEFT:
+        rc = ES_CALL(ESnap_SnapWindow)(win, ES_ZONE_BOTTOM_LEFT);
+        break;
+    case HK_BOTTOMRIGHT:
+        rc = ES_CALL(ESnap_SnapWindow)(win, ES_ZONE_BOTTOM_RIGHT);
         break;
     case HK_CENTRE:
         rc = ES_CALL(ESnap_SnapWindow)(win, ES_ZONE_CENTRE);
@@ -4393,6 +4808,469 @@ static int spike_open_libs(void)
     return 1;
 }
 
+/* ------------------------------------------------- Exchange's switch */
+
+/*
+ * Exchange's Disable and Enable, and the ARexx port's: the broker stops
+ * or starts taking input, and the library's engine with it. A drag in
+ * flight when it stops is finished off, so nothing is left drawn.
+ */
+static void spike_set_enabled(int on)
+{
+    if (g_broker == NULL) {
+        return;
+    }
+    if (on) {
+        ActivateCxObj(g_broker, 1L);
+        ES_CALL(ESnap_Enable)(TRUE);
+    } else {
+        struct ESnapReport r;
+
+        ActivateCxObj(g_broker, 0L);
+        ES_CALL(ESnap_Enable)(FALSE);
+        ES_CALL(ESnap_ResetInput)(&r);
+        spike_apply_report(&r);
+        spike_log_flush();
+    }
+}
+
+/* ------------------------------------------------------- ARexx port */
+
+/*
+ * The port is called EDGESNAP. A script, a button in a dock or a file
+ * manager, or a Shell line with rx can ask for what the hotkeys do:
+ *
+ *   SNAP ZONE/A,TITLE/K   LEFT RIGHT MAXIMIZE TOPLEFT TOPRIGHT
+ *                         BOTTOMLEFT BOTTOMRIGHT CENTRE
+ *   RESTORE TITLE/K       put the window back where it was
+ *   QUERY TITLE/K         RESULT: where it is snapped, NONE if nowhere
+ *   SELECT                the selector, under the pointer
+ *   PREFS                 the preferences window
+ *   ENABLE, DISABLE       what Exchange's buttons do
+ *   VERSION, HELP         RESULT: what runs, and what it understands
+ *   QUIT                  stop EdgeSnap
+ *
+ * Without TITLE a command acts on the active window, which is the
+ * Shell's own when the line comes from a Shell: TITLE is an AmigaDOS
+ * pattern matched against the window titles without regard to case,
+ * screens from the front, and the first window that matches is taken.
+ * Nothing new happens here: every command goes through the calls the
+ * hotkeys use, and the library checks the window as it does for them.
+ *
+ * Return codes as ARexx has them: 0 done, 5 refused (by the library, or
+ * no window to act on), 10 a command or an argument this port does not
+ * know. The secondary result stays 0: ARexx shows a script nothing of
+ * it, and AROS One's interpreter read it like a string (its RC came
+ * back holding RESULT's text), so a number there is a risk for nothing.
+ */
+#define ES_REXX_PORT "EDGESNAP"
+#define ES_REXX_LINE 256
+
+#ifdef __AROS__
+typedef SIPTR ESRexxArg;                 /* what ReadArgs fills there */
+#define ES_RX_RESULT2(v) ((IPTR)(v))
+#else
+typedef LONG ESRexxArg;
+#define ES_RX_RESULT2(v) ((LONG)(v))
+#endif
+
+static struct MsgPort *g_rexx_port;
+
+static void spike_rexx_libs_close(void)
+{
+#ifdef __amigaos4__
+    if (IRexxSys != NULL) {
+        DropInterface((struct Interface *)IRexxSys);
+        IRexxSys = NULL;
+    }
+#endif
+    if (RexxSysBase != NULL) {
+        CloseLibrary((struct Library *)RexxSysBase);
+        RexxSysBase = NULL;
+    }
+}
+
+/* 1 when the port is up. Without rexxsyslib.library there is no port,
+ * and nothing else changes. */
+static int spike_rexx_open(void)
+{
+    struct MsgPort *port;
+    int added = 0;
+
+    RexxSysBase = (void *)OpenLibrary((CONST_STRPTR)"rexxsyslib.library", 36);
+    if (RexxSysBase == NULL) {
+        return 0;
+    }
+#ifdef __amigaos4__
+    IRexxSys = (struct RexxSysIFace *)GetInterface(RexxSysBase, "main", 1,
+                                                   NULL);
+    if (IRexxSys == NULL) {
+        spike_rexx_libs_close();
+        return 0;
+    }
+#endif
+    port = CreateMsgPort();
+    if (port == NULL) {
+        spike_rexx_libs_close();
+        return 0;
+    }
+    port->mp_Node.ln_Name = (void *)ES_REXX_PORT;
+    port->mp_Node.ln_Pri = 0;
+    /* Looked for and added under one Forbid, or two could both add it. */
+    Forbid();
+    if (FindPort((STRPTR)ES_REXX_PORT) == NULL) {
+        AddPort(port);
+        added = 1;
+    }
+    Permit();
+    if (!added) {
+        DeleteMsgPort(port);
+        spike_rexx_libs_close();
+        spike_out("edgesnap: the ARexx port " ES_REXX_PORT " is taken\n");
+        return 0;
+    }
+    g_rexx_port = port;
+    return 1;
+}
+
+static void spike_rexx_close(void)
+{
+    struct Message *msg;
+
+    if (g_rexx_port != NULL) {
+        RemPort(g_rexx_port);
+        /* Whatever came in before the port went is answered, not lost:
+         * a script waits for its reply. */
+        while ((msg = GetMsg(g_rexx_port)) != NULL) {
+            if (IsRexxMsg((struct RexxMsg *)msg) ||
+                msg->mn_Length >= (UWORD)sizeof(struct RexxMsg)) {
+                ((struct RexxMsg *)msg)->rm_Result1 = RC_FATAL;
+                ((struct RexxMsg *)msg)->rm_Result2 = 0;
+            }
+            ReplyMsg(msg);
+        }
+        DeleteMsgPort(g_rexx_port);
+        g_rexx_port = NULL;
+    }
+    spike_rexx_libs_close();
+}
+
+static const struct {
+    const char *word;
+    ULONG zone;
+} rexx_zones[] = {
+    { "LEFT", ES_ZONE_LEFT },
+    { "RIGHT", ES_ZONE_RIGHT },
+    { "MAXIMIZE", ES_ZONE_MAX },
+    { "MAXIMISE", ES_ZONE_MAX },
+    { "MAX", ES_ZONE_MAX },
+    { "TOPLEFT", ES_ZONE_TOP_LEFT },
+    { "TOPRIGHT", ES_ZONE_TOP_RIGHT },
+    { "BOTTOMLEFT", ES_ZONE_BOTTOM_LEFT },
+    { "BOTTOMRIGHT", ES_ZONE_BOTTOM_RIGHT },
+    { "CENTRE", ES_ZONE_CENTRE },
+    { "CENTER", ES_ZONE_CENTRE }
+};
+
+#define REXX_ZONE_WORDS ((int)(sizeof(rexx_zones) / sizeof(rexx_zones[0])))
+
+/* What QUERY answers: the first word of each zone above, NONE for no
+ * zone, and PLACED for a rectangle a client chose (ES_ZONE_RECT). */
+static const char *spike_rexx_zone_word(ULONG zone)
+{
+    int i;
+
+    if (zone == ES_ZONE_RECT) {
+        return "PLACED";
+    }
+    for (i = 0; i < REXX_ZONE_WORDS; i++) {
+        if (rexx_zones[i].zone == zone) {
+            return rexx_zones[i].word;
+        }
+    }
+    return "NONE";
+}
+
+/*
+ * The window a command names: the active one, or with a TITLE pattern
+ * the first window that matches, screens from the front and on each
+ * screen the most recently opened first. It is found under LockIBase
+ * and used after it, as the active window is for a hotkey: the library
+ * checks it on every call and answers ES_ERR_STALE for one that went.
+ */
+static struct Window *spike_rexx_window(const char *pattern, int *bad)
+{
+    char tok[2 * ES_REXX_LINE + 2];
+    struct Screen *scr;
+    struct Window *w;
+    struct Window *found = NULL;
+    ULONG ilock;
+
+    *bad = 0;
+    if (pattern == NULL) {
+        return spike_active_window();
+    }
+    if (ParsePatternNoCase((STRPTR)pattern, (void *)tok,
+                           (LONG)sizeof(tok)) < 0) {
+        *bad = 1;
+        return NULL;
+    }
+    ilock = LockIBase(0);
+    for (scr = ES_IBASE->FirstScreen; scr != NULL && found == NULL;
+         scr = scr->NextScreen) {
+        for (w = scr->FirstWindow; w != NULL; w = w->NextWindow) {
+            if (w->Title != NULL &&
+                MatchPatternNoCase((STRPTR)tok, (STRPTR)w->Title)) {
+                found = w;
+                break;
+            }
+        }
+    }
+    UnlockIBase(ilock);
+    return found;
+}
+
+/*
+ * The arguments after the command word, read with the command's
+ * template exactly as a Shell command reads its own: ReadArgs wants
+ * the line to end in a newline. NULL for arguments that do not fit.
+ */
+static struct RDArgs *spike_rexx_args(const char *rest, const char *tmpl,
+                                      ESRexxArg *array, char *buf, int size)
+{
+    struct RDArgs *rda;
+    int n = 0;
+
+    while (rest[n] != '\0' && n < size - 2) {
+        buf[n] = rest[n];
+        n++;
+    }
+    if (rest[n] != '\0') {
+        return NULL;
+    }
+    buf[n++] = '\n';
+    buf[n] = '\0';
+    rda = (struct RDArgs *)AllocDosObject(DOS_RDARGS, NULL);
+    if (rda == NULL) {
+        return NULL;
+    }
+    rda->RDA_Source.CS_Buffer = (void *)buf;
+    rda->RDA_Source.CS_Length = n;
+    rda->RDA_Source.CS_CurChr = 0;
+    rda->RDA_Flags |= RDAF_NOPROMPT;
+    if (ReadArgs((STRPTR)tmpl, array, rda) == NULL) {
+        FreeDosObject(DOS_RDARGS, rda);
+        return NULL;
+    }
+    return rda;
+}
+
+static void spike_rexx_args_free(struct RDArgs *rda)
+{
+    FreeArgs(rda);
+    FreeDosObject(DOS_RDARGS, rda);
+}
+
+/* Nothing but blanks left after the command word? */
+static int spike_rexx_no_args(const char *rest)
+{
+    while (*rest == ' ' || *rest == '\t') {
+        rest++;
+    }
+    return *rest == '\0';
+}
+
+/*
+ * One command. Returns its RC; `result` gets the text of a RESULT, and
+ * `quit` is set by QUIT.
+ */
+static LONG spike_rexx_command(const char *line, char *result, int size,
+                               int *quit)
+{
+    char word[16];
+    char buf[ES_REXX_LINE + 2];
+    ESRexxArg args[2];
+    struct RDArgs *rda;
+    struct Window *win;
+    int bad;
+    int n = 0;
+    LONG rc;
+
+    while (*line == ' ' || *line == '\t') {
+        line++;
+    }
+    while (*line != '\0' && *line != ' ' && *line != '\t' &&
+           n < (int)sizeof(word) - 1) {
+        word[n++] = *line++;
+    }
+    word[n] = '\0';
+    if (*line != '\0' && *line != ' ' && *line != '\t') {
+        return RC_ERROR;                 /* no command is that long */
+    }
+
+    if (spike_arg_is(word, "SNAP") || spike_arg_is(word, "RESTORE") ||
+        spike_arg_is(word, "QUERY")) {
+        int snap = spike_arg_is(word, "SNAP");
+        ULONG zone = ES_ZONE_NONE;
+
+        args[0] = 0;
+        args[1] = 0;
+        rda = spike_rexx_args(line, snap ? "ZONE/A,TITLE/K" : "TITLE/K",
+                              args, buf, (int)sizeof(buf));
+        if (rda == NULL) {
+            return RC_ERROR;
+        }
+        if (snap) {
+            int i;
+
+            for (i = 0; i < REXX_ZONE_WORDS; i++) {
+                if (spike_arg_is((const char *)args[0], rexx_zones[i].word)) {
+                    zone = rexx_zones[i].zone;
+                    break;
+                }
+            }
+            if (i == REXX_ZONE_WORDS) {
+                spike_rexx_args_free(rda);
+                return RC_ERROR;
+            }
+        }
+        win = spike_rexx_window((const char *)(snap ? args[1] : args[0]),
+                                &bad);
+        spike_rexx_args_free(rda);
+        if (bad) {
+            return RC_ERROR;
+        }
+        if (win == NULL) {
+            return RC_WARN;
+        }
+        if (snap) {
+            rc = ES_CALL(ESnap_SnapWindow)(win, zone);
+        } else if (spike_arg_is(word, "RESTORE")) {
+            rc = ES_CALL(ESnap_UnsnapWindow)(win);
+        } else {
+            rc = ES_CALL(ESnap_QueryWindow)(win, &zone);
+            if (rc == ES_OK) {
+                strncpy(result, spike_rexx_zone_word(zone),
+                        (size_t)(size - 1));
+                result[size - 1] = '\0';
+                return RC_OK;           /* a question moves nothing */
+            }
+        }
+        if (rc != ES_OK) {
+            return RC_WARN;
+        }
+        spike_after_snap(rc);
+        return RC_OK;
+    }
+    if (!spike_rexx_no_args(line)) {
+        return RC_ERROR;                 /* the rest take no arguments */
+    }
+    if (spike_arg_is(word, "SELECT")) {
+        if (g_selector == NULL) {
+            spike_sel_open();
+        }
+        return RC_OK;
+    }
+    if (spike_arg_is(word, "PREFS")) {
+        spike_open_prefs();
+        return RC_OK;
+    }
+    if (spike_arg_is(word, "ENABLE") || spike_arg_is(word, "DISABLE")) {
+        spike_set_enabled(spike_arg_is(word, "ENABLE"));
+        return RC_OK;
+    }
+    if (spike_arg_is(word, "VERSION")) {
+        char text[64];
+
+#ifdef ES_STATIC_CORE
+        /* the body is linked in: no base, its revision is known */
+        sprintf(text, "EdgeSnap %s library 2.%ld", ES_VERSION,
+                (long)ES_LIB_REV);
+#else
+        sprintf(text, "EdgeSnap %s library %ld.%ld", ES_VERSION,
+                (long)EdgeSnapBase->lib_Version,
+                (long)EdgeSnapBase->lib_Revision);
+#endif
+        strncpy(result, text, (size_t)(size - 1));
+        result[size - 1] = '\0';
+        return RC_OK;
+    }
+    if (spike_arg_is(word, "HELP")) {
+        strncpy(result, "SNAP RESTORE QUERY SELECT PREFS ENABLE DISABLE "
+                        "VERSION HELP QUIT", (size_t)(size - 1));
+        result[size - 1] = '\0';
+        return RC_OK;
+    }
+    if (spike_arg_is(word, "QUIT")) {
+        *quit = 1;
+        return RC_OK;
+    }
+    return RC_ERROR;
+}
+
+/*
+ * Is this an ARexx command? rexxsyslib's IsRexxMsg() should say, but
+ * MorphOS's own rexxsyslib (50.x, a reimplementation that has no
+ * interpreter) leaves the name IsRexxMsg() looks for empty in what its
+ * CreateRexxMsg() makes (ln_Name NULL, mn_Length 128: VM, 2026-10-20),
+ * so a message as long as a RexxMsg, whose action is a command and
+ * which carries the command line, counts as one too. The port is named
+ * for ARexx; nothing else sends to it.
+ */
+static int spike_rexx_is_command(struct RexxMsg *rm)
+{
+    if (!IsRexxMsg(rm) &&
+        rm->rm_Node.mn_Length < (UWORD)sizeof(struct RexxMsg)) {
+        return 0;
+    }
+    return (rm->rm_Action & RXCODEMASK) == RXCOMM && rm->rm_Args[0] != 0;
+}
+
+/* Everything waiting at the port. Returns 1 when QUIT came. */
+static int spike_rexx_events(void)
+{
+    struct RexxMsg *rm;
+    int quit = 0;
+
+    while ((rm = (struct RexxMsg *)GetMsg(g_rexx_port)) != NULL) {
+        char result[ES_REXX_LINE];
+        LONG rc;
+
+        result[0] = '\0';
+        if (!spike_rexx_is_command(rm)) {
+            /* Only a message as long as a RexxMsg has the fields below:
+             * a shorter one is answered untouched. */
+            if (IsRexxMsg(rm) ||
+                rm->rm_Node.mn_Length >= (UWORD)sizeof(struct RexxMsg)) {
+                spike_log("edgesnap: ARexx port: not a command (action "
+                          "%08lx)\n", (unsigned long)rm->rm_Action);
+                rm->rm_Result1 = RC_ERROR;   /* a function call, say */
+                rm->rm_Result2 = 0;
+            }
+            ReplyMsg((struct Message *)rm);
+            continue;
+        }
+        rc = spike_rexx_command((const char *)rm->rm_Args[0], result,
+                                (int)sizeof(result), &quit);
+        rm->rm_Result1 = rc;
+        rm->rm_Result2 = 0;
+        /* A RESULT only for a script that asked (OPTIONS RESULTS), as
+         * an argstring it then owns. */
+        if (rc == RC_OK && result[0] != '\0' &&
+            (rm->rm_Action & RXFF_RESULT) != 0) {
+            rm->rm_Result2 = ES_RX_RESULT2(
+                CreateArgstring((STRPTR)result, (ULONG)strlen(result)));
+        }
+        ReplyMsg((struct Message *)rm);
+        /* Not while a drag is in flight: writing to a console that is
+         * being dragged blocks until the release (see spike_log). */
+        if (!g_drag_active) {
+            spike_log_flush();
+        }
+    }
+    return quit;
+}
+
 int main(int argc, char **argv)
 {
     struct MsgPort *port = NULL;
@@ -4404,7 +5282,7 @@ int main(int argc, char **argv)
     BYTE prefs_sig = -1;
     struct NotifyRequest prefs_notify;
     int prefs_watched = 0;
-    ULONG port_mask, engine_mask, prefs_mask = 0UL;
+    ULONG port_mask, engine_mask, prefs_mask = 0UL, rexx_mask = 0UL;
     int running = 1;
     int rc = RETURN_FAIL;
 
@@ -4445,6 +5323,7 @@ int main(int argc, char **argv)
     nb.nb_Title = (STRPTR)"EdgeSnap " ES_VERSION " by Michele Dipace";
     nb.nb_Descr = (STRPTR)"Drag windows to screen edges to tile them";
     nb.nb_Unique = NBU_UNIQUE | NBU_NOTIFY;
+    nb.nb_Flags = COF_SHOW_HIDE;
     nb.nb_Pri = (BYTE)g_cx_pri;
     nb.nb_Port = port;
 
@@ -4497,31 +5376,15 @@ int main(int argc, char **argv)
         goto out;
     }
 
+    g_broker = broker;
     custom = CxCustom(ES_CX_ACTION, 0);
     AttachCxObj(broker, custom);
-    if (!spike_add_hotkey(broker, port, (STRPTR)"ctrl alt cursor_left",
-                          HK_SNAP_LEFT) ||
-        !spike_add_hotkey(broker, port, (STRPTR)"ctrl alt cursor_right",
-                          HK_SNAP_RIGHT) ||
-        !spike_add_hotkey(broker, port, (STRPTR)"ctrl alt cursor_up",
-                          HK_SNAP_MAX) ||
-        !spike_add_hotkey(broker, port, (STRPTR)"ctrl alt cursor_down",
-                          HK_RESTORE) ||
-        !spike_add_hotkey(broker, port, (STRPTR)"ctrl alt c", HK_CENTRE) ||
-        /*
-         * Not ctrl alt space, which is where it began: MorphOS switches
-         * keymaps on that combination when more than one is set up, and
-         * took the first press every time (real hardware, 2026-09-25).
-         * Z as in Windows' own Win+Z, which opens the same kind of
-         * layout picker.
-         */
-        !spike_add_hotkey(broker, port, (STRPTR)"ctrl alt z", HK_SELECT) ||
-        !spike_add_hotkey(broker, port, (STRPTR)"ctrl alt d", HK_DUMP) ||
-        !spike_add_hotkey(broker, port, (STRPTR)"ctrl alt f", HK_FRAME) ||
-        CxObjError(broker) != 0) {
+    if (custom == NULL || CxObjError(broker) != 0) {
         spike_out("edgesnap: could not build the commodity tree\n");
         goto out;
     }
+    g_hotkey_port = port;
+    spike_hotkeys_rebuild();
 
     g_shared.engine_task = FindTask(NULL);
     g_shared.engine_sigmask = 1UL << engine_sig;
@@ -4553,17 +5416,16 @@ int main(int argc, char **argv)
            "<michele.dipace@kaffeine.net>, MIT license.\n");
     spike_out("  drag a window's title bar until the pointer touches a\n");
     spike_out("  screen edge or corner, then release.\n");
-    spike_out("  hotkeys: ctrl alt cursor left/right/up = snap, down = "
-           "restore,\n");
-    spike_out("           ctrl alt c = centre, ctrl alt z = selector,\n");
-    spike_out("           ctrl alt d = window dump.\n");
+    spike_hotkeys_print();
     spike_out("  quit: Ctrl-C here, or remove it from Exchange.\n");
     /* The centre is a zone the library learned in 2.9. An older one in
      * LIBS: answers BAD_ARGS, and the width cycle taught us that a
      * refusal nobody explains costs an evening. */
     if (ES_LIB_REV < 9) {
         spike_out("edgesnap: the library in LIBS: is older than 2.9, "
-                  "so ctrl alt c (centre) will be refused.\n");
+                  "so %s (centre) will be refused.\n",
+                  g_keys.key[ES_HK_CENTRE][0] != '\0' ?
+                  g_keys.key[ES_HK_CENTRE] : "none");
     }
     spike_out("edgesnap: prefs: zones %04x, edge %d px, corner %s, "
            "drag %d px,\n", (unsigned)g_cfg.engine.zones_mask,
@@ -4576,13 +5438,21 @@ int main(int argc, char **argv)
            g_cfg.bypass_qual == ES_QUAL_CTRL ? "ctrl" :
            g_cfg.bypass_qual == ES_QUAL_SHIFT ? "shift" : "none");
     spike_out("edgesnap:        margins l%d t%d r%d b%d, width cycle %s, "
-           "glide %s\n", g_cfg.margin.l, g_cfg.margin.t,
+           "glide %s,\n", g_cfg.margin.l, g_cfg.margin.t,
            g_cfg.margin.r, g_cfg.margin.b,
            g_cfg.cycle_sizes ? "on" : "off",
            g_cfg.animate ? "on" : "off");
+    spike_out("edgesnap:        drag restore %s\n",
+           g_cfg.drag_restore ? "on" : "off");
     spike_out("edgesnap:        (file: " ES_PREFS_ENV ")\n");
     if (g_cx_pri != 0) {
         spike_out("edgesnap: commodity priority %ld\n", (long)g_cx_pri);
+    }
+    if (spike_rexx_open()) {
+        rexx_mask = 1UL << g_rexx_port->mp_SigBit;
+        spike_out("edgesnap: ARexx port " ES_REXX_PORT "\n");
+    } else {
+        spike_out("edgesnap: no ARexx port (rexxsyslib.library)\n");
     }
     spike_dump_windows();
 
@@ -4597,10 +5467,17 @@ int main(int argc, char **argv)
         ULONG sel_mask = (g_selector != NULL) ?
             (1UL << g_selector->UserPort->mp_SigBit) : 0UL;
         ULONG sigs = Wait(port_mask | engine_mask | div_mask | sel_mask |
-                          prefs_mask | SIGBREAKF_CTRL_C);
+                          prefs_mask | rexx_mask | SIGBREAKF_CTRL_C);
 
         if (sel_mask != 0 && (sigs & sel_mask) != 0) {
             spike_sel_events();
+        }
+
+        if (rexx_mask != 0UL && (sigs & rexx_mask) != 0) {
+            if (spike_rexx_events()) {
+                spike_out("edgesnap: asked to quit by ARexx\n");
+                running = 0;
+            }
         }
 
         if (prefs_mask != 0UL && (sigs & prefs_mask) != 0) {
@@ -4633,20 +5510,17 @@ int main(int argc, char **argv)
                             running = 0;
                         }
                         break;
+                    case CXCMD_APPEAR:
+                        spike_open_prefs();
+                        break;
+                    case CXCMD_DISAPPEAR:
+                        /* Another program owns the preferences window. */
+                        break;
                     case CXCMD_DISABLE:
-                        ActivateCxObj(broker, 0L);
-                        {
-                            struct ESnapReport r;
-
-                            ES_CALL(ESnap_Enable)(FALSE);
-                            ES_CALL(ESnap_ResetInput)(&r);
-                            spike_apply_report(&r);
-                        }
-                        spike_log_flush();
+                        spike_set_enabled(0);
                         break;
                     case CXCMD_ENABLE:
-                        ActivateCxObj(broker, 1L);
-                        ES_CALL(ESnap_Enable)(TRUE);
+                        spike_set_enabled(1);
                         break;
                     default:
                         break;
@@ -4684,7 +5558,11 @@ out:
      * classic way to wedge commodities for every later client, which
      * is what the restart hang looked like from the outside.
      * edgesnap.library inherits this protocol.
+     *
+     * The ARexx port goes first of all: what comes after takes away
+     * what its commands use.
      */
+    spike_rexx_close();
     if (broker != NULL) {
         ActivateCxObj(broker, 0L);
     }
@@ -4693,6 +5571,7 @@ out:
     if (broker != NULL) {
         Delay(2L); /* ~40 ms: let any in-flight action return */
         DeleteCxObjAll(broker);
+        g_broker = NULL;
     }
     spike_preview_hide();
 #if defined(ES_PREVIEW_PIXELS) || defined(ES_PREVIEW_XOR)

@@ -71,6 +71,10 @@ int es_registry_zone(const ESRegistry *reg, void *ref);
 /* Step this window last took, 0 when unknown. */
 int es_registry_step(const ESRegistry *reg, void *ref);
 
+/* Where the snap put ref: 1 with *out set (out may be NULL to ask),
+ * 0 when there is no entry for it, *out untouched. */
+int es_registry_snapped(const ESRegistry *reg, void *ref, ESRect *out);
+
 /*
  * Restore lookup: given where the window is NOW, decide.
  *   ES_OK          - *out = geometry to restore; entry consumed.
@@ -81,6 +85,26 @@ int es_registry_step(const ESRegistry *reg, void *ref);
  */
 int es_registry_restore(ESRegistry *reg, void *ref, const ESRect *current,
                         ESRect *out);
+
+/*
+ * 2.24: ref was dragged by its title bar and let go outside every zone;
+ * start is its box when the drag began, now its box after the drop.
+ * From 2.25 moved says the decision's pointer is at least the engine's
+ * drag_min_px from its starting pointer, in either axis. The executor
+ * gets this from es_engine_drop_moved; box travel is not a threshold.
+ *   ES_OK: *out = the box from before the first snap, entry consumed.
+ *     The registry snapped it to a zone (not ES_ZONE_RECT), it had the
+ *     snapped size at the start and still has it (ES_RESTORE_SLACK_PX
+ *     permits size rounding), and moved is nonzero. The box may have
+ *     moved only a few pixels or remained pinned to the screen.
+ *   ES_ERR_NOT_SNAPPED: no entry, or a client's placement.
+ *   ES_ERR_CHANGED: resized since the snap or by the drag, or the
+ *     pointer was brought back within the drag threshold.
+ * Unlike es_registry_restore, a refusal changes nothing. Positions are
+ * not compared: only size still belongs to the snap registry's slack.
+ */
+int es_registry_drag_out(ESRegistry *reg, void *ref, const ESRect *start,
+                         const ESRect *now, int moved, ESRect *out);
 
 /* Drop the entry for ref (window closed, app opted out, ...). */
 void es_registry_forget(ESRegistry *reg, void *ref);

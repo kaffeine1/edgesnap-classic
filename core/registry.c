@@ -14,6 +14,7 @@
  */
 
 #include "registry.h"
+#include <limits.h>
 
 void es_registry_init(ESRegistry *reg)
 {
@@ -84,6 +85,21 @@ int es_registry_step(const ESRegistry *reg, void *ref)
     return 0;
 }
 
+int es_registry_snapped(const ESRegistry *reg, void *ref, ESRect *out)
+{
+    int i;
+
+    for (i = 0; i < ES_REGISTRY_SLOTS; i++) {
+        if (reg->slot[i].used && reg->slot[i].ref == ref) {
+            if (out != 0) {
+                *out = reg->slot[i].snapped;
+            }
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int es_registry_zone(const ESRegistry *reg, void *ref)
 {
     int i;
@@ -96,14 +112,18 @@ int es_registry_zone(const ESRegistry *reg, void *ref)
     return ES_ZONE_NONE;
 }
 
+/* Any two int coordinates, saturating when their distance cannot fit. */
+static int es_distance(int a, int b)
+{
+    unsigned int d = a >= b ? (unsigned int)a - (unsigned int)b
+                             : (unsigned int)b - (unsigned int)a;
+
+    return d > (unsigned int)INT_MAX ? INT_MAX : (int)d;
+}
+
 static int es_near(int a, int b)
 {
-    int d = a - b;
-
-    if (d < 0) {
-        d = -d;
-    }
-    return d <= ES_RESTORE_SLACK_PX;
+    return es_distance(a, b) <= ES_RESTORE_SLACK_PX;
 }
 
 int es_registry_restore(ESRegistry *reg, void *ref, const ESRect *current,
@@ -121,6 +141,29 @@ int es_registry_restore(ESRegistry *reg, void *ref, const ESRect *current,
         !es_near(current->h, e->snapped.h)) {
         e->used = 0;
         return ES_ERR_CHANGED;
+    }
+    *out = e->prebox;
+    e->used = 0;
+    return ES_OK;
+}
+
+int es_registry_drag_out(ESRegistry *reg, void *ref, const ESRect *start,
+                         const ESRect *now, int moved, ESRect *out)
+{
+    ESRegistryEntry *e;
+
+    e = es_registry_lookup(reg, ref);
+    if (e == 0 || !((e->zone >= ES_ZONE_LEFT && e->zone <= ES_ZONE_MAX) ||
+                    e->zone == ES_ZONE_CENTRE)) {
+        return ES_ERR_NOT_SNAPPED;
+    }
+    /* A changed size is not ours to restore; slack here is for rounding. */
+    if (!es_near(start->w, e->snapped.w) || !es_near(start->h, e->snapped.h) ||
+        !es_near(now->w, e->snapped.w) || !es_near(now->h, e->snapped.h)) {
+        return ES_ERR_CHANGED;
+    }
+    if (!moved) {
+        return ES_ERR_CHANGED;     /* pointer back within drag threshold */
     }
     *out = e->prebox;
     e->used = 0;

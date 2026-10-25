@@ -115,6 +115,7 @@ struct ESGroup {
 
 struct ESPrefs {
     ESConfig cfg;
+    ESHotkeys keys;                /* kept and written back as read   */
     int value[ES_MAX_SETTINGS];    /* what the gadgets say now        */
     struct Gadget *gadget[ES_MAX_SETTINGS];
     int zone_on[ES_ZONE_COUNT];
@@ -771,7 +772,7 @@ static int es_run(struct ESPrefs *p)
                 }
                 if (gad->GadgetID == ES_ID_SAVE) {
                     es_collect(p);
-                    if (!esp_store(&p->cfg, 1)) {
+                    if (!esp_store(&p->cfg, &p->keys, 1)) {
                         rc = RETURN_WARN;
                     }
                     if (!es_store_offscreen(p, 1)) {
@@ -780,7 +781,7 @@ static int es_run(struct ESPrefs *p)
                     done = 1;
                 } else if (gad->GadgetID == ES_ID_USE) {
                     es_collect(p);
-                    if (!esp_store(&p->cfg, 0)) {
+                    if (!esp_store(&p->cfg, &p->keys, 0)) {
                         rc = RETURN_WARN;
                     }
                     if (!es_store_offscreen(p, 0)) {
@@ -888,10 +889,20 @@ int main(int argc, char **argv)
         printf("EdgeSnapPrefs: AmigaOS 2.04 or later is needed\n");
         goto out;
     }
-    esp_load(&p.cfg);
+    esp_load(&p.cfg, &p.keys);
     p.off_avail = es_offscreen_available();
     p.off_was = p.off_now = p.off_avail ? eso_query(0) : 0;
     p.table = es_settings(&p.count);
+    /* the first page only, for now: the rows of the hotkeys page are
+     * kept as the file has them and written back unchanged */
+    {
+        int i;
+
+        for (i = 1; i < p.count &&
+             strcmp(p.table[i].page, p.table[0].page) == 0; i++) {
+        }
+        p.count = i;
+    }
     if (p.count > ES_MAX_SETTINGS) {
         p.count = ES_MAX_SETTINGS;
     }

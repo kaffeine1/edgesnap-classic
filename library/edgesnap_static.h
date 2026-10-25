@@ -24,7 +24,7 @@
  * commodity asks a library how new it is. Keep it in step with the
  * lanes' ES_LIB_REVISION and the history in edgesnap_types.h.
  */
-#define ES_STATIC_REVISION 25
+#define ES_STATIC_REVISION 26
 #define ES_LIB_REV ES_STATIC_REVISION
 
 #define ESnap_QueryCapabilities esb_query_capabilities
@@ -34,9 +34,12 @@
 #define ESnap_ExcludeWindow     esb_exclude_window
 #define ESnap_SetOptionsA       esb_set_options
 #define ESnap_Enable            esb_enable
-#define ESnap_FeedInput         esb_input
 #define ESnap_ResetInput        esb_input_reset
-#define ESnap_IgnoreWindows     esb_ignore_windows
+/* esb_input takes int counts; esb_ignore_windows returns void and takes int. */
+#define ESnap_FeedInput(p, m, r, q, out) \
+    esb_input((int)(p), (int)(m), (int)(r), (q), (out))
+#define ESnap_IgnoreWindows(w, n) \
+    (esb_ignore_windows((w), (int)(n)), (LONG)ES_OK)
 #define ESnap_QueryScreenArea   esb_query_screen_area
 #define ESnap_QueryDivider      esb_query_divider
 #define ESnap_QueryDividerAt    esb_query_divider_at
@@ -60,5 +63,8 @@
 #define ESnap_GroupRemoveWindow esb_group_remove_window
 #define ESnap_QueryGroupOf      esb_query_group_of
 #define ESnap_SetGroupOptionsA  esb_set_group_options
+#define ESnap_QueryDividers     esb_query_dividers
+#define ESnap_MoveDividerT      esb_move_divider_t
+#define ESnap_QueryDividerWindows esb_query_divider_windows
 
 #endif /* EDGESNAP_STATIC_H */

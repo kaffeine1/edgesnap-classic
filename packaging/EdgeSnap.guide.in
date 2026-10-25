@@ -1,11 +1,11 @@
 @database EdgeSnap
 @$VER: EdgeSnap.guide %%VER%%
 @author "Michele Dipace <michele.dipace@kaffeine.net>"
-@(c) "Copyright (c) 2026 Michele Dipace - MIT licence"
+@(c) "Copyright (c) 2026 Michele Dipace, MIT licence"
 @wordwrap
 
-@node MAIN "EdgeSnap 0.42 beta"
-@{b}EdgeSnap 0.42 beta@{ub}
+@node MAIN "EdgeSnap 0.5 beta"
+@{b}EdgeSnap 0.5 beta@{ub}
 Window snapping for AmigaOS 4.x, MorphOS and AROS (x86_64, aarch64, i386)
 by Michele Dipace <michele.dipace@kaffeine.net>
 
@@ -14,6 +14,7 @@ by Michele Dipace <michele.dipace@kaffeine.net>
   @{" Using it            " link USING}
   @{" Settings            " link SETTINGS}
   @{" From the Shell      " link SHELL}
+  @{" From ARexx          " link AREXX}
   @{" For programmers     " link LIBRARY}
   @{" Licence and author  " link AUTHOR}
 
@@ -24,7 +25,7 @@ by Michele Dipace <michele.dipace@kaffeine.net>
 
 Drag a window by its title bar until the @{b}pointer@{ub} touches a
 screen edge or a corner. A frame shows where the window will land;
-let go and it fills that half or that quarter of the screen - the
+let go and it fills that half or that quarter of the screen. It is the
 behaviour Windows and macOS users take for granted, on systems that
 never had it.
 
@@ -75,8 +76,8 @@ there is none; and no settings file is written, since the preferences
 window writes one when you press Save.
 
 @{b}Updating@{ub} is installing again. The running copy is stopped,
-the old library is let go of, and the new one takes over - no reboot,
-and nothing for you to type. On the Raspberry Pi the old library cannot
+the old library is let go of, and the new one takes over, with no
+reboot and nothing for you to type. On the Raspberry Pi the old library cannot
 be let go of yet, so a new one takes over at the next boot. Your
 settings are left alone: the commented template is only offered when
 ENVARC:EdgeSnap.prefs does not exist yet, and a file already there is
@@ -108,7 +109,21 @@ it to 0 for the corner itself.
 
 If a window is already snapped to one side, snapping another to the
 other side gives it the space that is actually left, not a rigid
-half - so a sixty/forty split stays sixty/forty.
+half, so a sixty/forty split stays sixty/forty.
+
+@{b}Dragging a snapped window away@{ub}
+Drag a snapped window by its title bar and let go away from the edges,
+and it gets back the size it had before it was snapped. It comes back
+under the pointer, which keeps its place along the title bar: a
+maximised window grabbed a third of the way across comes back with the
+pointer a third of the way across, as on Windows. Let go at an edge or
+a corner instead and it snaps there. A window you resized after
+snapping it keeps its size; so does one that hardly moved, and one let
+go with the bypass key held. @{b}DRAGRESTORE@{ub} turns this off.
+
+Where windows may not leave the screen, a maximised window has little
+or no room to move, so a drag may not take it away: @{b}ctrl alt
+cursor down@{ub} puts it back instead.
 
 @{b}Windows that may not leave the screen@{ub}
 A drag snaps where the pointer reaches the edge. Whether a dragged
@@ -142,10 +157,17 @@ together; on AmigaOS 4 and MorphOS the pointer becomes a double arrow
 and the windows follow as you drag, on AROS only the line follows and
 the windows change when you let go, the way AROS moves its own
 windows. Dragging far towards one side stops where a window would
-become smaller than it allows - that is a limit, not a fault. Three or
+become smaller than it allows: that is a limit, not a fault. Three or
 four windows that share one line share one seam.
 
 @{b}Hotkeys@{ub}
+These are the keys as EdgeSnap comes. Each one can be changed on the
+@{b}Hotkeys@{ub} page of the preferences, with the @{b}HOTKEY...@{ub}
+settings below, or in the icon's tooltypes, written as Exchange writes
+them: @{b}HOTKEYLEFT="ctrl alt x"@{ub}, for instance. @{b}none@{ub} or
+@{b}off@{ub} leaves an action without a key; so does an empty field in
+the window.
+
   @{b}ctrl alt cursor left@{ub}    snap the active window left
   @{b}ctrl alt cursor right@{ub}   snap it right
       Press the same one again and the window takes two thirds of the
@@ -167,16 +189,29 @@ four windows that share one line share one seam.
       else closes it. It acts on the window that was active when it
       opened.
   @{b}ctrl alt d@{ub}              print a window dump, to diagnose dock detection
+  @{b}ctrl alt f@{ub}              show the preview frame briefly, without a drag
+
+The four quarter actions have no key until you give them one:
+@{b}HOTKEYTOPLEFT@{ub}, @{b}HOTKEYTOPRIGHT@{ub},
+@{b}HOTKEYBOTTOMLEFT@{ub} and @{b}HOTKEYBOTTOMRIGHT@{ub}.
+@{b}CX_POPKEY@{ub} (or @{b}POPKEY@{ub}) opens these preferences,
+as Exchange's @{b}Show@{ub} does; it has no key by default. Asking
+again brings the window already open to the front.
+
+The preferences window checks every key before it saves, and refuses
+two actions on the same key even when the qualifiers are written in
+another order. The commodity skips a bad or duplicate key and says so
+in its output, so the rest of EdgeSnap still runs.
 
 @{b}Changing the settings@{ub}
-Open @{b}SYS:Prefs/EdgeSnap@{ub} - the installer puts it there, with
+Open @{b}SYS:Prefs/EdgeSnap@{ub}: the installer puts it there, with
 the rest of the system's preferences. Change what you like and press
 Save; EdgeSnap follows immediately, without being restarted. Use
 applies the change for this session only, Cancel changes nothing.
 
 The window offers every setting listed under
-@{" Settings " link SETTINGS}, each with the range it accepts, so
-nothing you can choose there can be refused. It also has the
+@{" Settings " link SETTINGS}, on the Snapping and Hotkeys pages.
+A refused hotkey leaves the window open for correction. It also has the
 system's own "Windows can move off-screen", in a section named after
 the system (see above): it is kept in the system's preferences, not in
 EdgeSnap's, and the system follows it at once.
@@ -184,7 +219,9 @@ EdgeSnap's, and the system follows it at once.
 @{b}Getting past the zones@{ub}
 If you want to drag a window right up to the edge without it
 snapping, set @{b}BYPASSQUAL@{ub} (see @{" Settings " link SETTINGS})
-and hold that key while you drag.
+and hold that key while you drag. Held as you let go, the same key
+keeps a snapped window at its snapped size when you drag it away from
+the edges.
 
 @endnode
 
@@ -212,12 +249,70 @@ and hold that key while you drag.
       they can and 5 when they cannot.
 
 Run from a Shell rather than with @{b}Run >NIL:@{ub} (on AROS
-@{b}Run >NIL: <NIL:@{ub}) and it prints what it decides, drag by drag -
-useful when something does not behave as expected.
+@{b}Run >NIL: <NIL:@{ub}) and it prints what it decides, drag by drag,
+which helps when something does not behave as expected.
 
 Settings are re-read while it runs: whatever writes
-@{b}ENV:EdgeSnap.prefs@{ub} - the preferences window, an editor, a
-script - is noticed at once.
+@{b}ENV:EdgeSnap.prefs@{ub} (the preferences window, an editor, a
+script) is noticed at once.
+
+@endnode
+
+@node AREXX "From ARexx"
+@{b}From ARexx@{ub}
+
+EdgeSnap answers at the ARexx port @{b}EDGESNAP@{ub}, so a script, a
+button in a dock or a file manager, or a line in the Shell can do what
+the hotkeys do:
+
+  rx "ADDRESS EDGESNAP 'SNAP LEFT'"
+
+  @{b}SNAP ZONE/A,TITLE/K@{ub}
+      Snap a window. ZONE is LEFT, RIGHT, MAXIMIZE, TOPLEFT, TOPRIGHT,
+      BOTTOMLEFT, BOTTOMRIGHT or CENTRE. LEFT and RIGHT again take the
+      width cycle, as the hotkeys do.
+  @{b}RESTORE TITLE/K@{ub}
+      Put it back where it was before its first snap.
+  @{b}QUERY TITLE/K@{ub}
+      RESULT is where the window is snapped: one of the zones above,
+      PLACED for a place a program chose, NONE when it is not snapped.
+  @{b}SELECT@{ub}
+      Open the selector under the pointer.
+  @{b}PREFS@{ub}
+      Open the preferences window.
+  @{b}ENABLE@{ub}, @{b}DISABLE@{ub}
+      What Exchange's buttons do.
+  @{b}VERSION@{ub}, @{b}HELP@{ub}
+      RESULT is the version of EdgeSnap and of the library, or the
+      list of commands.
+  @{b}QUIT@{ub}
+      Stop EdgeSnap.
+
+Without TITLE a command acts on the active window. From a Shell that
+is the Shell itself, so TITLE names another one: an AmigaDOS pattern,
+matched against the window titles without regard to case, screens from
+the front; the first window that matches is taken.
+
+  /* the drawer of the RAM disk on the left, a Shell on the right */
+  OPTIONS RESULTS
+  ADDRESS EDGESNAP
+  'SNAP LEFT TITLE="Ram Disk#?"'
+  'SNAP RIGHT TITLE=#?Shell#?'
+  'QUERY TITLE="Ram Disk#?"'
+  SAY RESULT
+
+The return codes are the usual ones: 0 when it was done, 5 when it was
+refused (no window matches, or the library said no, for instance to a
+window that cannot be resized), 10 for a command or a word the port
+does not know. RESULT needs @{b}OPTIONS RESULTS@{ub} in the script.
+
+ARexx itself must be installed and running (RexxMast); EdgeSnap only
+needs rexxsyslib.library to open its port, and works without it. On
+MorphOS that means the ARexx interpreter installed on top of the
+system's own rexxsyslib, which has none. On AROS One the command is
+@{b}SYS:Rexxc/RX@{ub}, and its RC after a command to a port is not to be
+trusted: the trace shows the real code, and RESULT works as
+everywhere.
 
 @endnode
 
@@ -225,9 +320,9 @@ script - is noticed at once.
 @{b}For programmers@{ub}
 
 @{b}Two version numbers, and why@{ub}
-EdgeSnap is 0.42: a beta, complete in what it does and tested on real
+EdgeSnap is 0.5: a beta, complete in what it does and tested on real
 MorphOS hardware, on a Raspberry Pi 400 with AROS, and on AmigaOS 4,
-AROS x86_64 and AROS i386 under emulation.
+MorphOS, AROS x86_64 and AROS i386 under emulation.
 @{b}edgesnap.library@{ub} says %%LIBVER%%, and that is not a mistake: a
 library's version is its interface, not its product. It reached 2 when
 the seam was added to the API, and the revision climbs with every build
@@ -269,7 +364,7 @@ things:
   ESnap_PlaceWindow          put a window in a rectangle
   ESnap_PlaceWindowsA        put several at once, a whole layout
 
-  @{b}Clients and groups (2.10, 2.12)@{ub}
+  @{b}Clients and groups (2.10, 2.12, 2.20)@{ub}
   ESnap_RegisterClient       one client owns the interactive engine,
   ESnap_UnregisterClient     any number may own layouts
   ESnap_CreateGroup          windows a layout client looks after,
@@ -277,6 +372,15 @@ things:
   ESnap_GroupRemoveWindow    else, the commodity's drag included
   ESnap_QueryGroupOf
   ESnap_DeleteGroup
+  ESnap_SetGroupOptionsA     a group's gap between its windows and
+                             margins around them
+
+  @{b}The seams of a group (2.24)@{ub}
+  ESnap_QueryDividers        the seams between a group's windows,
+                             each with a token
+  ESnap_MoveDividerT         move the seam a token names; the gap
+                             stays as it is
+  ESnap_QueryDividerWindows  the windows on each side of it
 
   @{b}Running it@{ub}
   ESnap_Enable               switch snapping, or a layout, on or off
