@@ -246,3 +246,143 @@ Drag windows to screen edges to tile them
 MSG_FATAL_BROKER (62//)
 EdgeSnap could not register itself with Commodities.\n\nIt will not run. Exchange and commodities.library are what it needs.
 ;
+; core/config.c:558 page of the first rows
+MSG_PAGE_SNAPPING (63//)
+Snapping
+;
+; core/config.c:606 page of HOTKEYLEFT and below
+MSG_PAGE_HOTKEYS (64//)
+Hotkeys
+;
+; core/config.c:606 group of HOTKEYLEFT to CYCLESIZES
+MSG_GROUP_SNAP (65//)
+Snap the active window
+;
+; core/config.c:637 group of HOTKEYSELECT, CX_POPKEY
+MSG_GROUP_OPEN (66//)
+Open
+;
+; core/config.c:643 group of HOTKEYDUMP, HOTKEYFRAME
+MSG_GROUP_DIAGNOSTICS (67//)
+Diagnostics
+;
+; core/config.c:564 label of DRAGRESTORE
+MSG_DRAGRESTORE_LABEL (68//)
+Old size when dragged away
+;
+; core/config.c:565 help of DRAGRESTORE
+MSG_DRAGRESTORE_HELP (69//)
+A snapped window dragged by its title bar and let go away from the edges gets back the size it had before it was snapped, under the pointer. With the bypass key held it keeps the snapped size.
+;
+; core/config.c:606 label of HOTKEYLEFT
+MSG_HOTKEYLEFT_LABEL (70//)
+Left half
+;
+; core/config.c:607 help of HOTKEYLEFT
+MSG_HOTKEYLEFT_HELP (71//)
+Snap left. Repeat for the width cycle below.
+;
+; core/config.c:609 label of HOTKEYRIGHT
+MSG_HOTKEYRIGHT_LABEL (72//)
+Right half
+;
+; core/config.c:610 help of HOTKEYRIGHT
+MSG_HOTKEYRIGHT_HELP (73//)
+Snap right. Repeat for the width cycle below.
+;
+; core/config.c:612 label of HOTKEYMAX
+MSG_HOTKEYMAX_LABEL (74//)
+Maximize
+;
+; core/config.c:613 help of HOTKEYMAX
+MSG_HOTKEYMAX_HELP (75//)
+Fill the usable screen area.
+;
+; core/config.c:615 label of HOTKEYTOPLEFT
+MSG_HOTKEYTOPLEFT_LABEL (76//)
+Top left
+;
+; core/config.c:616 help of HOTKEYTOPLEFT
+MSG_HOTKEYTOPLEFT_HELP (77//)
+Snap to the top left quarter.
+;
+; core/config.c:618 label of HOTKEYTOPRIGHT
+MSG_HOTKEYTOPRIGHT_LABEL (78//)
+Top right
+;
+; core/config.c:619 help of HOTKEYTOPRIGHT
+MSG_HOTKEYTOPRIGHT_HELP (79//)
+Snap to the top right quarter.
+;
+; core/config.c:621 label of HOTKEYBOTTOMLEFT
+MSG_HOTKEYBOTTOMLEFT_LABEL (80//)
+Bottom left
+;
+; core/config.c:622 help of HOTKEYBOTTOMLEFT
+MSG_HOTKEYBOTTOMLEFT_HELP (81//)
+Snap to the bottom left quarter.
+;
+; core/config.c:624 label of HOTKEYBOTTOMRIGHT
+MSG_HOTKEYBOTTOMRIGHT_LABEL (82//)
+Bottom right
+;
+; core/config.c:625 help of HOTKEYBOTTOMRIGHT
+MSG_HOTKEYBOTTOMRIGHT_HELP (83//)
+Snap to the bottom right quarter.
+;
+; core/config.c:627 label of HOTKEYCENTRE
+MSG_HOTKEYCENTRE_LABEL (84//)
+Centre
+;
+; core/config.c:628 help of HOTKEYCENTRE
+MSG_HOTKEYCENTRE_HELP (85//)
+Keep the window's own size and put it in the middle.
+;
+; core/config.c:630 label of HOTKEYRESTORE
+MSG_HOTKEYRESTORE_LABEL (86//)
+Put back
+;
+; core/config.c:631 help of HOTKEYRESTORE
+MSG_HOTKEYRESTORE_HELP (87//)
+Restore the box the window had before its first snap.
+;
+; core/config.c:637 label of HOTKEYSELECT
+MSG_HOTKEYSELECT_LABEL (88//)
+Selector
+;
+; core/config.c:638 help of HOTKEYSELECT
+MSG_HOTKEYSELECT_HELP (89//)
+Open the selector under the pointer. The same hotkey closes it.
+;
+; core/config.c:640 label of CX_POPKEY
+MSG_POPKEY_LABEL (90//)
+Preferences
+;
+; core/config.c:641 help of CX_POPKEY
+MSG_POPKEY_HELP (91//)
+Open these preferences, as Exchange's Show does. POPKEY works too.
+;
+; core/config.c:643 label of HOTKEYDUMP
+MSG_HOTKEYDUMP_LABEL (92//)
+Window dump
+;
+; core/config.c:644 help of HOTKEYDUMP
+MSG_HOTKEYDUMP_HELP (93//)
+Print the windows and dock decisions in the commodity's output.
+;
+; core/config.c:646 label of HOTKEYFRAME
+MSG_HOTKEYFRAME_LABEL (94//)
+Preview frame test
+;
+; core/config.c:647 help of HOTKEYFRAME
+MSG_HOTKEYFRAME_HELP (95//)
+Show the preview frame briefly, without a drag.
+;
+; prefs/gadtools/edgesnap_prefs.c: requester when a hotkey repeats another (as prefs/os4)
+MSG_REQ_HOTKEY_DUPLICATE (96//)
+The hotkey for %s:\n%s\n\nMatches %s. Choose another key or leave it empty.
+;
+; prefs/gadtools/edgesnap_prefs.c: requester when ParseIX refuses a hotkey (as prefs/os4)
+MSG_REQ_HOTKEY_INVALID (97//)
+Invalid hotkey for %s:\n%s\n\nUse an input description as Exchange writes it, or leave it empty.
+;

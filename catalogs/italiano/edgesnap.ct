@@ -1,4 +1,4 @@
-## version $VER: edgesnap.catalog 1.0 (20.10.2026)
+## version $VER: edgesnap.catalog 1.1 (25.10.2026)
 ## language italiano
 ## codeset 0
 ;
@@ -249,4 +249,144 @@ Affianca finestre trascinate ai bordi
 MSG_FATAL_BROKER
 EdgeSnap non ha potuto registrarsi presso Commodities.\n\nNon verrà avviato: richiede Exchange e commodities.library.
 ; EdgeSnap could not register itself with Commodities.\n\nIt will not run. Exchange and commodities.library are what it needs.
+;
+MSG_PAGE_SNAPPING
+Aggancio
+; Snapping
+;
+MSG_PAGE_HOTKEYS
+Scorciatoie
+; Hotkeys
+;
+MSG_GROUP_SNAP
+Aggancia la finestra attiva
+; Snap the active window
+;
+MSG_GROUP_OPEN
+Apri
+; Open
+;
+MSG_GROUP_DIAGNOSTICS
+Diagnostica
+; Diagnostics
+;
+MSG_DRAGRESTORE_LABEL
+Misura di prima se trascinata via
+; Old size when dragged away
+;
+MSG_DRAGRESTORE_HELP
+Una finestra agganciata, trascinata per la barra del titolo e rilasciata lontano dai bordi, riprende la misura che aveva prima dell'aggancio, sotto il puntatore. Tenendo premuto il tasto per ignorare le zone conserva la misura agganciata.
+; A snapped window dragged by its title bar and let go away from the edges gets back the size it had before it was snapped, under the pointer. With the bypass key held it keeps the snapped size.
+;
+MSG_HOTKEYLEFT_LABEL
+Metà sinistra
+; Left half
+;
+MSG_HOTKEYLEFT_HELP
+Aggancia a sinistra. Ripetere per il ciclo delle larghezze qui sotto.
+; Snap left. Repeat for the width cycle below.
+;
+MSG_HOTKEYRIGHT_LABEL
+Metà destra
+; Right half
+;
+MSG_HOTKEYRIGHT_HELP
+Aggancia a destra. Ripetere per il ciclo delle larghezze qui sotto.
+; Snap right. Repeat for the width cycle below.
+;
+MSG_HOTKEYMAX_LABEL
+Massimizza
+; Maximize
+;
+MSG_HOTKEYMAX_HELP
+Occupa tutta l'area utile dello schermo.
+; Fill the usable screen area.
+;
+MSG_HOTKEYTOPLEFT_LABEL
+Alto a sinistra
+; Top left
+;
+MSG_HOTKEYTOPLEFT_HELP
+Aggancia al quarto in alto a sinistra.
+; Snap to the top left quarter.
+;
+MSG_HOTKEYTOPRIGHT_LABEL
+Alto a destra
+; Top right
+;
+MSG_HOTKEYTOPRIGHT_HELP
+Aggancia al quarto in alto a destra.
+; Snap to the top right quarter.
+;
+MSG_HOTKEYBOTTOMLEFT_LABEL
+Basso a sinistra
+; Bottom left
+;
+MSG_HOTKEYBOTTOMLEFT_HELP
+Aggancia al quarto in basso a sinistra.
+; Snap to the bottom left quarter.
+;
+MSG_HOTKEYBOTTOMRIGHT_LABEL
+Basso a destra
+; Bottom right
+;
+MSG_HOTKEYBOTTOMRIGHT_HELP
+Aggancia al quarto in basso a destra.
+; Snap to the bottom right quarter.
+;
+MSG_HOTKEYCENTRE_LABEL
+Centro
+; Centre
+;
+MSG_HOTKEYCENTRE_HELP
+Mantiene la misura della finestra e la porta al centro.
+; Keep the window's own size and put it in the middle.
+;
+MSG_HOTKEYRESTORE_LABEL
+Rimetti com'era
+; Put back
+;
+MSG_HOTKEYRESTORE_HELP
+Ripristina posizione e misura che la finestra aveva prima del primo aggancio.
+; Restore the box the window had before its first snap.
+;
+MSG_HOTKEYSELECT_LABEL
+Selettore
+; Selector
+;
+MSG_HOTKEYSELECT_HELP
+Apre il selettore sotto il puntatore. La stessa scorciatoia lo chiude.
+; Open the selector under the pointer. The same hotkey closes it.
+;
+MSG_POPKEY_LABEL
+Preferenze
+; Preferences
+;
+MSG_POPKEY_HELP
+Apre queste preferenze, come il pulsante Show di Exchange. Funziona anche POPKEY.
+; Open these preferences, as Exchange's Show does. POPKEY works too.
+;
+MSG_HOTKEYDUMP_LABEL
+Elenco delle finestre
+; Window dump
+;
+MSG_HOTKEYDUMP_HELP
+Scrive le finestre e le decisioni sui dock nell'output della commodity.
+; Print the windows and dock decisions in the commodity's output.
+;
+MSG_HOTKEYFRAME_LABEL
+Prova della cornice di anteprima
+; Preview frame test
+;
+MSG_HOTKEYFRAME_HELP
+Mostra per un attimo la cornice di anteprima, senza trascinamento.
+; Show the preview frame briefly, without a drag.
+;
+MSG_REQ_HOTKEY_DUPLICATE
+La scorciatoia per %s:\n%s\n\ncoincide con quella di %s. Sceglierne un'altra o lasciare vuoto il campo.
+; The hotkey for %s:\n%s\n\nMatches %s. Choose another key or leave it empty.
+;
+MSG_REQ_HOTKEY_INVALID
+Scorciatoia non valida per %s:\n%s\n\nUsare una descrizione come la scrive Exchange, oppure lasciare vuoto il campo.
+; Invalid hotkey for %s:\n%s\n\nUse an input description as Exchange writes it, or leave it empty.
 ;
