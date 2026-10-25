@@ -15,9 +15,10 @@
  * of framed groups, sized from the screen's font, split where the
  * columns come out most even, which on a PAL 640x256 screen with
  * topaz 8 is the only way the whole vocabulary fits. Values are taken
- * from the IDCMP messages as the gadgets change, not read back at the
- * end: GT_GetGadgetAttrs() arrived with V39, and nothing here needs
- * more than V37.
+ * from the IDCMP messages as the gadgets change, with typed text read
+ * from StringInfo before a page goes away: GT_GetGadgetAttrs() arrived
+ * with V39, and nothing here needs more than V37. The page cycle shares
+ * the buttons' row, so it costs none of the screen's scarce height.
  *
  * One row is not EdgeSnap's: "Windows can move off-screen" is
  * AmigaOS's own setting, the box of the same name in its IControl
@@ -60,7 +61,7 @@ static const char es_version_cookie[] __attribute__((used)) =
     "$VER: EdgeSnapPrefs " ES_VERSION " (" ES_VERSION_DATE ") "
     "Copyright (c) 2026 Michele Dipace";
 
-#define ES_MAX_SETTINGS 24
+#define ES_MAX_SETTINGS 48
 #define ES_ZONE_COUNT   7
 #define ES_MAX_GROUPS   8
 
@@ -87,6 +88,7 @@ enum {
     ES_ID_USE,
     ES_ID_CANCEL,
     ES_ID_OFFSCREEN,          /* AmigaOS's setting, not ours */
+    ES_ID_PAGE,
     ES_ID_SETTING = 100,      /* + index into the table  */
     ES_ID_ZONE = 200          /* + index into zone order */
 };
@@ -108,6 +110,7 @@ struct ESGroup {
     int first, last;          /* indices into the table; -1: the row    */
                               /* that is AmigaOS's, not in the table    */
     int rows;
+    int keys;                 /* checkboxes beside keys get a whole row */
     int label_w;              /* widest label among the labelled rows   */
     int w, h;                 /* the frame                              */
     int col;
@@ -115,7 +118,9 @@ struct ESGroup {
 
 struct ESPrefs {
     ESConfig cfg;
-    ESHotkeys keys;                /* kept and written back as read   */
+    ESHotkeys keys;
+    /* Keep even refused text while its page has no gadgets. */
+    char key_text[ES_MAX_SETTINGS][ES_HOTKEY_SIZE];
     int value[ES_MAX_SETTINGS];    /* what the gadgets say now        */
     struct Gadget *gadget[ES_MAX_SETTINGS];
     int zone_on[ES_ZONE_COUNT];
@@ -123,11 +128,17 @@ struct ESPrefs {
     int off_was, off_now;          /* windows can move off-screen     */
     const ESSetting *table;
     int count;
+    char *page_name[ES_MAX_SETTINGS + 1];
+    int page_first[ES_MAX_SETTINGS + 1];
+    int pages, page, next_page;
+    int action;                   /* acted on after messages are replied */
+    int focus;                    /* refused field, until activation works */
     struct Screen *scr;
     struct DrawInfo *dri;
     struct TextAttr ta;
     APTR vi;
     struct Gadget *glist;
+    int gadgets;                  /* excludes Intuition's own gadgets */
     struct Window *win;
     int bl, bt;                    /* the window's borders, left, top */
     int fh;                        /* font height                     */
@@ -136,6 +147,7 @@ struct ESPrefs {
     int box_w, box_h;              /* a checkbox                      */
     struct ESFrame frame[ES_MAX_GROUPS];
     int frames;
+    int page_w, button_y;
     int inner_w, inner_h;
 };
 
@@ -189,6 +201,8 @@ static int es_gadget_w(struct ESPrefs *p, const ESSetting *s)
             return es_text_w(p, "00000") + 12;
         }
         return ES_SLIDER_W + 4 + es_text_w(p, "000");  /* and its level */
+    case ES_SET_KEY:
+        return es_text_w(p, "ctrl alt right") + 12;
     default:
         return 0;
     }
@@ -226,11 +240,11 @@ static const char es_off_group[] = "AmigaOS";
 static const char es_off_label[] = "Windows can move off-screen:";
 static const char es_off_after[] = "Sensitivity";   /* its place */
 
-static int es_measure(struct ESPrefs *p, struct ESGroup *g, int max)
+static int es_measure(struct ESPrefs *p, int page, struct ESGroup *g, int max)
 {
     int n = 0, i, k;
 
-    for (i = 0; i < p->count; i++) {
+    for (i = p->page_first[page]; i < p->page_first[page + 1]; i++) {
         const ESSetting *s = &p->table[i];
 
         if (n > 0 && es_same_group(g[n - 1].name, s->group)) {
@@ -242,23 +256,22 @@ static int es_measure(struct ESPrefs *p, struct ESGroup *g, int max)
             g[n].name = s->group;
             g[n].first = g[n].last = i;
             g[n].rows = 0;
+            g[n].keys = 0;
             g[n].label_w = 0;
             n++;
         }
         if (s->kind == ES_SET_ZONES) {
             g[n - 1].rows += ES_ZONE_ROWS;
         } else {
-            int lw = es_text_w(p, s->label) + es_text_w(p, ":");
-
             g[n - 1].rows += 1;
-            if (lw > g[n - 1].label_w) {
-                g[n - 1].label_w = lw;
+            if (s->kind == ES_SET_KEY) {
+                g[n - 1].keys = 1;
             }
         }
     }
     /* AmigaOS's row: a group of its own, after the one it belongs
      * next to, or last */
-    if (p->off_avail && n < max) {
+    if (page == 0 && p->off_avail && n < max) {
         int at = n;
 
         for (i = 0; i < n; i++) {
@@ -273,12 +286,27 @@ static int es_measure(struct ESPrefs *p, struct ESGroup *g, int max)
         g[at].name = es_off_group;
         g[at].first = g[at].last = -1;
         g[at].rows = 1;
+        g[at].keys = 0;
         g[at].label_w = es_text_w(p, es_off_label);
         n++;
     }
     for (i = 0; i < n; i++) {
         int widest = 0;
 
+        /* A long checkbox label must not widen every key's label
+         * column. It uses its own row, with its label on the right. */
+        for (k = g[i].first; g[i].first >= 0 && k <= g[i].last; k++) {
+            const ESSetting *s = &p->table[k];
+
+            if (s->kind != ES_SET_ZONES &&
+                !(g[i].keys && s->kind == ES_SET_BOOL)) {
+                int lw = es_text_w(p, s->label) + es_text_w(p, ":");
+
+                if (lw > g[i].label_w) {
+                    g[i].label_w = lw;
+                }
+            }
+        }
         if (g[i].first < 0) {
             widest = g[i].label_w + ES_LGAP + p->box_w;
         }
@@ -288,6 +316,8 @@ static int es_measure(struct ESPrefs *p, struct ESGroup *g, int max)
 
             if (s->kind == ES_SET_ZONES) {
                 rw = es_zone_grid_w(p);
+            } else if (g[i].keys && s->kind == ES_SET_BOOL) {
+                rw = p->box_w + ES_LGAP + es_text_w(p, s->label);
             } else {
                 rw = g[i].label_w + ES_LGAP + es_gadget_w(p, s);
             }
@@ -325,6 +355,56 @@ static void es_columns(struct ESGroup *g, int n)
     for (i = 0; i < n; i++) {
         g[i].col = (i < best) ? 0 : 1;
     }
+}
+
+static int es_layout(struct ESPrefs *p, int page, struct ESGroup *g,
+                      int *col_w, int *height)
+{
+    int n = es_measure(p, page, g, ES_MAX_GROUPS);
+    int col_h[2] = { ES_PAD, ES_PAD };
+    int i;
+
+    es_columns(g, n);
+    col_w[0] = col_w[1] = 0;
+    for (i = 0; i < n; i++) {
+        int c = g[i].col;
+
+        if (g[i].w > col_w[c]) {
+            col_w[c] = g[i].w;
+        }
+        col_h[c] += g[i].h + ES_GAP;
+    }
+    *height = col_h[0] > col_h[1] ? col_h[0] : col_h[1];
+    return n;
+}
+
+/* One size for all pages: no asynchronous resize, and the buttons do
+ * not move under the pointer when the page changes. */
+static void es_size(struct ESPrefs *p)
+{
+    struct ESGroup g[ES_MAX_GROUPS];
+    int page, button_w = es_text_w(p, "Cancel") + 16;
+
+    for (page = 0; page < p->pages; page++) {
+        int col_w[2], height, width, cycle_w;
+
+        es_layout(p, page, g, col_w, &height);
+        width = col_w[0] + col_w[1] + ES_PAD * 3;
+        if (width > p->inner_w) {
+            p->inner_w = width;
+        }
+        if (height > p->button_y) {
+            p->button_y = height;
+        }
+        cycle_w = es_text_w(p, p->page_name[page]) + 40;
+        if (cycle_w > p->page_w) {
+            p->page_w = cycle_w;
+        }
+    }
+    if (p->inner_w < ES_PAD * 3 + p->page_w + button_w * 3 + ES_GAP * 2) {
+        p->inner_w = ES_PAD * 3 + p->page_w + button_w * 3 + ES_GAP * 2;
+    }
+    p->inner_h = p->button_y + p->gadh + ES_PAD;
 }
 
 /* ---------------------------------------------------------- gadgets */
@@ -376,20 +456,19 @@ static struct Gadget *es_checkbox(struct ESPrefs *p, struct Gadget *prev,
                         TAG_DONE);
 }
 
-/* One labelled row: the gadget at the group's gadget column, its
- * label to the left. */
+/* One labelled row: the group's gadget column and a label to its left,
+ * except for a checkbox beside keys, whose label follows its box. */
 static struct Gadget *es_make(struct ESPrefs *p, struct Gadget *prev,
                               const ESSetting *s, int index,
-                              int x, int y, int label_w)
+                              int x, int y, int label_w, int keys)
 {
     struct NewGadget ng;
     static char label[ES_MAX_SETTINGS][48];
-    int value = es_setting_value(&p->cfg, index);
+    int value = p->value[index];
     int gx = x + label_w + ES_LGAP;
     int gy = y + (p->rowh - p->gadh) / 2;
     int id = ES_ID_SETTING + index;
 
-    p->value[index] = value;
     /* the table's labels have no colon: they feed the manual too */
     strncpy(label[index], s->label, sizeof(label[index]) - 2);
     label[index][sizeof(label[index]) - 2] = '\0';
@@ -397,6 +476,10 @@ static struct Gadget *es_make(struct ESPrefs *p, struct Gadget *prev,
 
     switch (s->kind) {
     case ES_SET_BOOL:
+        if (keys) {
+            return es_checkbox(p, prev, id, s->label, PLACETEXT_RIGHT,
+                               x, y, value);
+        }
         return es_checkbox(p, prev, id, label[index], PLACETEXT_LEFT,
                            gx, y, value);
     case ES_SET_CHOICE:
@@ -406,6 +489,14 @@ static struct Gadget *es_make(struct ESPrefs *p, struct Gadget *prev,
         return CreateGadget(CYCLE_KIND, prev, &ng,
                             GTCY_Labels, (ESTagData)es_choices(index, s->choices),
                             GTCY_Active, value,
+                            TAG_DONE);
+    case ES_SET_KEY:
+        es_newgadget(p, &ng, id, label[index], gx, gy,
+                     es_gadget_w(p, s), p->gadh);
+        ng.ng_Flags = PLACETEXT_LEFT;
+        return CreateGadget(STRING_KIND, prev, &ng,
+                            GTST_String, (ESTagData)p->key_text[index],
+                            GTST_MaxChars, ES_HOTKEY_SIZE - 1,
                             TAG_DONE);
     case ES_SET_INT:
         if (es_is_string(s)) {
@@ -438,10 +529,9 @@ static struct Gadget *es_make(struct ESPrefs *p, struct Gadget *prev,
 static struct Gadget *es_make_zones(struct ESPrefs *p, struct Gadget *prev,
                                     int index, int x, int y)
 {
-    int mask = es_setting_value(&p->cfg, index);
+    int mask = p->value[index];
     int cell[ES_ZONE_COLS], k;
 
-    p->value[index] = mask;
     es_zone_cells(p, cell);
     for (k = 0; k < ES_ZONE_COUNT && prev != NULL; k++) {
         int col = k % ES_ZONE_COLS, row = k / ES_ZONE_COLS;
@@ -477,22 +567,18 @@ static int es_build(struct ESPrefs *p)
 {
     struct ESGroup g[ES_MAX_GROUPS];
     struct Gadget *gad;
+    struct NewGadget ng;
     int n, i, k;
-    int col_w[2] = { 0, 0 }, col_y[2], col_x[2];
-    int button_w, total_w, total_h;
+    int col_w[2], col_y[2], col_x[2];
+    int button_w, height;
 
-    n = es_measure(p, g, ES_MAX_GROUPS);
-    es_columns(g, n);
-    for (i = 0; i < n; i++) {
-        if (g[i].w > col_w[g[i].col]) {
-            col_w[g[i].col] = g[i].w;
-        }
-    }
+    n = es_layout(p, p->page, g, col_w, &height);
     col_x[0] = ES_PAD;
     col_x[1] = ES_PAD + col_w[0] + ES_PAD;
     col_y[0] = col_y[1] = ES_PAD;
 
     gad = CreateContext(&p->glist);
+    memset(p->gadget, 0, sizeof(p->gadget));
     p->frames = 0;
     for (i = 0; i < n && gad != NULL; i++) {
         int c = g[i].col;
@@ -522,34 +608,46 @@ static int es_build(struct ESPrefs *p)
                 gad = es_make_zones(p, gad, k, x + ES_PAD, gy);
                 gy += p->rowh * ES_ZONE_ROWS;
             } else {
-                gad = es_make(p, gad, s, k, x + ES_PAD, gy, g[i].label_w);
+                gad = es_make(p, gad, s, k, x + ES_PAD, gy,
+                               g[i].label_w, g[i].keys);
                 p->gadget[k] = gad;
                 gy += p->rowh;
             }
         }
         col_y[c] = y + g[i].h + ES_GAP;
     }
-    total_w = col_x[1] + col_w[1] + ES_PAD;
-    total_h = (col_y[0] > col_y[1] ? col_y[0] : col_y[1]);
-
-    /* the three buttons, right-aligned under the columns */
+    /* The page cycle on the left, the three buttons on the right. */
+    if (gad != NULL) {
+        es_newgadget(p, &ng, ES_ID_PAGE, NULL, ES_PAD, p->button_y,
+                     p->page_w, p->gadh);
+        gad = CreateGadget(CYCLE_KIND, gad, &ng,
+                           GTCY_Labels, (ESTagData)p->page_name,
+                           GTCY_Active, p->page,
+                           TAG_DONE);
+    }
     button_w = es_text_w(p, "Cancel") + 16;
     if (gad != NULL) {
-        int bx = total_w - ES_PAD - button_w * 3 - ES_GAP * 2;
+        int bx = p->inner_w - ES_PAD - button_w * 3 - ES_GAP * 2;
 
-        gad = es_button(p, gad, "Save", ES_ID_SAVE, bx, total_h, button_w);
+        gad = es_button(p, gad, "Save", ES_ID_SAVE, bx, p->button_y, button_w);
         if (gad != NULL) {
             gad = es_button(p, gad, "Use", ES_ID_USE,
-                            bx + button_w + ES_GAP, total_h, button_w);
+                            bx + button_w + ES_GAP, p->button_y, button_w);
         }
         if (gad != NULL) {
             gad = es_button(p, gad, "Cancel", ES_ID_CANCEL,
-                            bx + (button_w + ES_GAP) * 2, total_h, button_w);
+                            bx + (button_w + ES_GAP) * 2,
+                            p->button_y, button_w);
         }
     }
-    p->inner_w = total_w;
-    p->inner_h = total_h + p->gadh + ES_PAD;
-    return gad != NULL;
+    p->gadgets = 0;
+    if (gad == NULL) {
+        return 0;
+    }
+    for (gad = p->glist; gad != NULL; gad = gad->NextGadget) {
+        p->gadgets++;
+    }
+    return 1;
 }
 
 /* The frames and their titles: drawn, not gadgets, so they are
@@ -611,9 +709,20 @@ static void es_collect(struct ESPrefs *p)
 {
     int i, k;
 
-    for (i = 0; i < p->count; i++) {
+    for (i = p->page_first[p->page]; i < p->page_first[p->page + 1]; i++) {
         const ESSetting *s = &p->table[i];
 
+        if (s->kind == ES_SET_KEY) {
+            struct StringInfo *si = p->gadget[i] != NULL ?
+                (struct StringInfo *)p->gadget[i]->SpecialInfo : NULL;
+
+            if (si != NULL && si->Buffer != NULL) {
+                strncpy(p->key_text[i], (const char *)si->Buffer,
+                         ES_HOTKEY_SIZE - 1);
+                p->key_text[i][ES_HOTKEY_SIZE - 1] = '\0';
+            }
+            continue;
+        }
         if (es_is_string(s) && p->gadget[i] != NULL) {
             p->value[i] = es_typed_number(p->gadget[i], p->value[i]);
         }
@@ -625,10 +734,9 @@ static void es_collect(struct ESPrefs *p)
                     mask |= (int)ES_ZONEBIT(es_zone_order[k]);
                 }
             }
-            es_setting_apply(&p->cfg, i, mask);
-        } else {
-            es_setting_apply(&p->cfg, i, p->value[i]);
+            p->value[i] = mask;
         }
+        es_setting_apply(&p->cfg, i, p->value[i]);
     }
 }
 
@@ -662,6 +770,159 @@ static void es_changed(struct ESPrefs *p, struct Gadget *gad, UWORD code)
             break;
         }
     }
+}
+
+static void es_focus(struct ESPrefs *p)
+{
+    if (p->focus >= 0 && p->gadget[p->focus] != NULL &&
+        ActivateGadget(p->gadget[p->focus], p->win, NULL)) {
+        p->focus = -1;
+    }
+}
+
+/* Never replace gadgets while a message still refers to them. Actions
+ * wait until this whole batch, including GadTools' context, is replied. */
+static void es_messages(struct ESPrefs *p)
+{
+    struct IntuiMessage *msg;
+
+    while ((msg = GT_GetIMsg(p->win->UserPort)) != NULL) {
+        struct Gadget *gad = (struct Gadget *)msg->IAddress;
+
+        switch (msg->Class) {
+        case IDCMP_CLOSEWINDOW:
+            p->action = ES_ID_CANCEL;
+            break;
+        case IDCMP_REFRESHWINDOW:
+            GT_BeginRefresh(p->win);
+            es_draw_frames(p);
+            GT_EndRefresh(p->win, TRUE);
+            break;
+        case IDCMP_ACTIVEWINDOW:
+            es_focus(p);
+            break;
+        case IDCMP_GADGETUP:
+        case IDCMP_GADGETDOWN:
+        case IDCMP_MOUSEMOVE:
+            if (gad == NULL) {
+                break;
+            }
+            if (gad->GadgetID == ES_ID_PAGE) {
+                if (msg->Code < p->pages) {
+                    p->next_page = (int)msg->Code;
+                }
+            } else if (gad->GadgetID == ES_ID_SAVE ||
+                       gad->GadgetID == ES_ID_USE ||
+                       gad->GadgetID == ES_ID_CANCEL) {
+                if (p->action != ES_ID_CANCEL) {
+                    p->action = gad->GadgetID;
+                }
+            } else {
+                es_changed(p, gad, msg->Code);
+            }
+            break;
+        case IDCMP_VANILLAKEY:
+            if (msg->Code == 27) {             /* Esc: cancel */
+                p->action = ES_ID_CANCEL;
+            }
+            break;
+        default:
+            break;
+        }
+        GT_ReplyIMsg(msg);
+    }
+}
+
+static int es_show_page(struct ESPrefs *p, int page)
+{
+    struct RastPort *rp = p->win->RPort;
+
+    if (page == p->page) {
+        p->next_page = page;
+        return 1;
+    }
+    p->focus = -1;
+    es_collect(p);
+    RemoveGList(p->win, p->glist, p->gadgets);
+    /* Removal deactivates a string field. Catch its last edits and
+     * any messages that arrived during removal before freeing it. */
+    es_messages(p);
+    es_collect(p);
+    FreeGadgets(p->glist);
+    p->glist = NULL;
+    p->page = p->next_page = page;
+
+    SetAPen(rp, p->dri->dri_Pens[BACKGROUNDPEN]);
+    SetDrMd(rp, JAM1);
+    RectFill(rp, p->bl, p->bt,
+              p->bl + p->inner_w - 1, p->bt + p->inner_h - 1);
+    if (!es_build(p)) {
+        printf("EdgeSnapPrefs: the page's gadgets would not build\n");
+        return 0;
+    }
+    AddGList(p->win, p->glist, (UWORD)-1, p->gadgets, NULL);
+    RefreshGList(p->glist, p->win, NULL, p->gadgets);
+    GT_RefreshWindow(p->win, NULL);
+    es_draw_frames(p);
+    return 1;
+}
+
+static int es_key_error(struct ESPrefs *p, int bad, int duplicate,
+                         const char *text)
+{
+    struct EasyStruct es;
+    ULONG args[3];
+    int page;
+
+    for (page = 0; page < p->pages; page++) {
+        if (bad >= p->page_first[page] && bad < p->page_first[page + 1]) {
+            if (!es_show_page(p, page)) {
+                return 0;
+            }
+            break;
+        }
+    }
+    es.es_StructSize = sizeof(es);
+    es.es_Flags = 0;
+    es.es_Title = (UBYTE *)"EdgeSnap Preferences";
+    es.es_GadgetFormat = (UBYTE *)"OK";
+    args[0] = (ULONG)p->table[bad].label;
+    args[1] = (ULONG)text;
+    if (duplicate >= 0) {
+        args[2] = (ULONG)p->table[duplicate].label;
+        es.es_TextFormat = (UBYTE *)"The hotkey for %s:\n%s\n\nMatches %s. "
+                                  "Choose another key or leave it empty.";
+    } else {
+        es.es_TextFormat = (UBYTE *)"Invalid hotkey for %s:\n%s\n\nUse an input "
+                                  "description as Exchange writes it, or "
+                                  "leave it empty.";
+    }
+    EasyRequestArgs(p->win, &es, NULL, args);
+    p->focus = bad;
+    /* The requester may return before our window is active again.
+     * IDCMP_ACTIVEWINDOW retries if this first activation fails. */
+    es_focus(p);
+    return 1;
+}
+
+/* Raw text survives page changes, even when the parser refuses it.
+ * Only Save and Use ask the parser, then ParseIX and the duplicate check.
+ * -1 means the refused field's page could not be rebuilt. */
+static int es_validate(struct ESPrefs *p)
+{
+    int i, bad, duplicate;
+
+    for (i = 0; i < p->count; i++) {
+        if (p->table[i].kind == ES_SET_KEY &&
+            es_setting_apply_text(&p->keys, i, p->key_text[i]) != ES_OK) {
+            return es_key_error(p, i, -1, p->key_text[i]) ? 0 : -1;
+        }
+    }
+    if (!esp_validate_hotkeys(&p->keys, &bad, &duplicate)) {
+        return es_key_error(p, bad, duplicate,
+                             es_setting_text(&p->keys, bad)) ? 0 : -1;
+    }
+    return 1;
 }
 
 /* ------------------------------------------------------------- main */
@@ -728,10 +989,10 @@ static int es_run(struct ESPrefs *p)
                             WA_Activate, TRUE,
                             WA_SmartRefresh, TRUE,
                             WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_REFRESHWINDOW |
-                                      IDCMP_VANILLAKEY |
+                                      IDCMP_VANILLAKEY | IDCMP_ACTIVEWINDOW |
                                       BUTTONIDCMP | CHECKBOXIDCMP |
                                       CYCLEIDCMP | SLIDERIDCMP |
-                                      INTEGERIDCMP,
+                                      INTEGERIDCMP | STRINGIDCMP,
                             TAG_DONE);
     if (p->win == NULL) {
         printf("EdgeSnapPrefs: the window would not open (%dx%d inside)\n",
@@ -743,65 +1004,40 @@ static int es_run(struct ESPrefs *p)
     winsig = 1UL << p->win->UserPort->mp_SigBit;
 
     while (!done) {
-        struct IntuiMessage *msg;
-        ULONG got = Wait(winsig | SIGBREAKF_CTRL_C);
+        int action, valid;
 
-        if (got & SIGBREAKF_CTRL_C) {
-            break;
-        }
-        while ((msg = GT_GetIMsg(p->win->UserPort)) != NULL) {
-            ULONG class = msg->Class;
-            UWORD code = msg->Code;
-            struct Gadget *gad = (struct Gadget *)msg->IAddress;
+        if (p->action == 0 && p->next_page == p->page) {
+            ULONG got = Wait(winsig | SIGBREAKF_CTRL_C);
 
-            GT_ReplyIMsg(msg);
-            switch (class) {
-            case IDCMP_CLOSEWINDOW:
-                done = 1;
-                break;
-            case IDCMP_REFRESHWINDOW:
-                GT_BeginRefresh(p->win);
-                es_draw_frames(p);
-                GT_EndRefresh(p->win, TRUE);
-                break;
-            case IDCMP_GADGETUP:
-            case IDCMP_GADGETDOWN:
-            case IDCMP_MOUSEMOVE:
-                if (gad == NULL) {
-                    break;
-                }
-                if (gad->GadgetID == ES_ID_SAVE) {
-                    es_collect(p);
-                    if (!esp_store(&p->cfg, &p->keys, 1)) {
-                        rc = RETURN_WARN;
-                    }
-                    if (!es_store_offscreen(p, 1)) {
-                        rc = RETURN_WARN;
-                    }
-                    done = 1;
-                } else if (gad->GadgetID == ES_ID_USE) {
-                    es_collect(p);
-                    if (!esp_store(&p->cfg, &p->keys, 0)) {
-                        rc = RETURN_WARN;
-                    }
-                    if (!es_store_offscreen(p, 0)) {
-                        rc = RETURN_WARN;
-                    }
-                    done = 1;
-                } else if (gad->GadgetID == ES_ID_CANCEL) {
-                    done = 1;
-                } else {
-                    es_changed(p, gad, code);
-                }
-                break;
-            case IDCMP_VANILLAKEY:
-                if (code == 27) {              /* Esc: cancel */
-                    done = 1;
-                }
-                break;
-            default:
+            if (got & SIGBREAKF_CTRL_C) {
                 break;
             }
+        }
+        es_messages(p);
+        action = p->action;
+        p->action = 0;
+        if (action == ES_ID_CANCEL) {
+            done = 1;
+        } else if (action == ES_ID_SAVE || action == ES_ID_USE) {
+            es_collect(p);
+            valid = es_validate(p);
+            if (valid < 0) {
+                rc = RETURN_FAIL;
+                done = 1;
+            } else if (valid) {
+                int permanent = action == ES_ID_SAVE;
+
+                if (!esp_store(&p->cfg, &p->keys, permanent)) {
+                    rc = RETURN_WARN;
+                }
+                if (!es_store_offscreen(p, permanent)) {
+                    rc = RETURN_WARN;
+                }
+                done = 1;
+            }
+        } else if (!es_show_page(p, p->next_page)) {
+            rc = RETURN_FAIL;
+            done = 1;
         }
     }
     CloseWindow(p->win);
@@ -875,7 +1111,7 @@ static int es_offscreen_command(int argc, char **argv)
 int main(int argc, char **argv)
 {
     static struct ESPrefs p;
-    int rc = RETURN_FAIL;
+    int rc = RETURN_FAIL, i;
 
     (void)es_version_cookie;
     if (argc >= 3 && es_word(argv[1], "OFFSCREEN")) {
@@ -893,19 +1129,25 @@ int main(int argc, char **argv)
     p.off_avail = es_offscreen_available();
     p.off_was = p.off_now = p.off_avail ? eso_query(0) : 0;
     p.table = es_settings(&p.count);
-    /* the first page only, for now: the rows of the hotkeys page are
-     * kept as the file has them and written back unchanged */
-    {
-        int i;
-
-        for (i = 1; i < p.count &&
-             strcmp(p.table[i].page, p.table[0].page) == 0; i++) {
+    if (p.count < 1 || p.count > ES_MAX_SETTINGS) {
+        printf("EdgeSnapPrefs: too many settings, or none\n");
+        goto out;
+    }
+    for (i = 0; i < p.count; i++) {
+        if (i == 0 || !es_same_group(p.table[i].page, p.table[i - 1].page)) {
+            p.page_name[p.pages] = (char *)p.table[i].page;
+            p.page_first[p.pages++] = i;
         }
-        p.count = i;
+        p.value[i] = es_setting_value(&p.cfg, i);
+        if (p.table[i].kind == ES_SET_KEY) {
+            strncpy(p.key_text[i], es_setting_text(&p.keys, i),
+                     ES_HOTKEY_SIZE - 1);
+            p.key_text[i][ES_HOTKEY_SIZE - 1] = '\0';
+        }
     }
-    if (p.count > ES_MAX_SETTINGS) {
-        p.count = ES_MAX_SETTINGS;
-    }
+    p.page_name[p.pages] = NULL;
+    p.page_first[p.pages] = p.count;
+    p.focus = -1;
     p.scr = LockPubScreen(NULL);
     if (p.scr == NULL) {
         printf("EdgeSnapPrefs: no public screen\n");
@@ -936,6 +1178,7 @@ int main(int argc, char **argv)
     p.bl = p.scr->WBorLeft;
     p.bt = p.scr->WBorTop + p.scr->Font->ta_YSize + 1;
 
+    es_size(&p);
     if (!es_build(&p)) {
         printf("EdgeSnapPrefs: the gadgets would not build\n");
         goto out;
