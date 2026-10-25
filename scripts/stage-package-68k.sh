@@ -67,7 +67,7 @@ Short:        Tile windows by dragging them to an edge
 Author:       michele.dipace@kaffeine.net (Michele Dipace)
 Uploader:     michele.dipace@kaffeine.net (Michele Dipace)
 Type:         util/cdity
-Version:      0.42 (beta)
+Version:      0.5 (beta)
 Architecture: m68k-amigaos >= 2.0.4
 License:      MIT
 
@@ -120,6 +120,37 @@ pointer back: until the restart, if you turn the setting off, and on
 AmigaOS 3.1 and earlier, which do not have it. There push the mouse on
 a little further against the edge and the frame comes up.
 
+Every hotkey can now be changed on a new Hotkeys page of the
+preferences, in the icon's tooltypes or as a Shell argument, with an
+input description as Exchange writes it (HOTKEYLEFT=ctrl alt
+cursor_left); none, or an empty field, leaves an action without a key.
+The keys as they come are the ones of 0.42. The four quarters get
+actions of their own (HOTKEYTOPLEFT and so on), with no key until you
+give them one, and CX_POPKEY (also POPKEY) opens the preferences, as
+Exchange's Show button does. The preferences window has two pages,
+Snapping and Hotkeys; it refuses a key the system does not understand,
+or two actions on the same key, with a requester, while the commodity
+skips such a key and says so in its output instead of not starting.
+Keys change at once when the preferences are saved, without a restart.
+
+An ARexx port, EDGESNAP, lets a script, a dock button or a file manager
+do what the hotkeys do: SNAP (LEFT RIGHT MAXIMIZE TOPLEFT TOPRIGHT
+BOTTOMLEFT BOTTOMRIGHT CENTRE), RESTORE, QUERY (RESULT is where the
+window is snapped), SELECT, PREFS, ENABLE, DISABLE, VERSION, HELP and
+QUIT, on the active window or on another window matched by a TITLE
+AmigaDOS pattern, for example rx "ADDRESS EDGESNAP 'SNAP LEFT'". ARexx
+must be running (SYS:System/RexxMast); without rexxsyslib.library
+EdgeSnap simply has no port.
+
+A snapped window that you drag away by its title bar, and let go away
+from the edges, gets back the size it had before it was snapped, under
+the pointer, as on Windows. "Old size when dragged away" in the
+preferences turns that off.
+
+A seam between windows kept apart by a gap, as a tiling window manager
+lays them out, keeps the gap when dragged, and the whole gap can be
+grabbed, not only a thin strip in its middle.
+
 A corner is now the corner itself. If you saved EdgeSnap's preferences
 with an earlier version, they may keep the corner size they had then,
 4, a band along each side: set Corner size to 0 in SYS:Prefs/EdgeSnap
@@ -161,6 +192,8 @@ cat > "$DEST/EdgeSnap.prefs" <<'EOR'
 #             third, then a half again: yes | no
 # ANIMATE     glide into the zone instead of jumping: yes | no
 #             (default no: how well it looks depends on the machine)
+# DRAGRESTORE a snapped window dragged away from the edges gets its old
+#             size back: yes | no
 
 #ZONES=all
 #EDGEPX=12
@@ -170,4 +203,5 @@ cat > "$DEST/EdgeSnap.prefs" <<'EOR'
 #BYPASSQUAL=alt
 #CYCLESIZES=yes
 #ANIMATE=yes
+#DRAGRESTORE=yes
 EOR

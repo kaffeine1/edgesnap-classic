@@ -137,12 +137,12 @@ Raise it if another commodity keeps the mouse button for itself.
 """),
 
     # the preferences window: on AmigaOS the setting waits
-    ("""nothing you can choose there can be refused. It also has the
+    ("""A refused hotkey leaves the window open for correction. It also has the
 system's own "Windows can move off-screen", in a section named after
 the system (see above): it is kept in the system's preferences, not in
 EdgeSnap's, and the system follows it at once.
 """,
-     """nothing you can choose there can be refused. It also has the
+     """A refused hotkey leaves the window open for correction. It also has the
 system's own "Windows can move off-screen", in the section named
 AmigaOS (see above): it is kept in the system's preferences, not in
 EdgeSnap's, and AmigaOS takes it up when it resets the Workbench
@@ -160,22 +160,37 @@ together, following the pointer as you drag."""),
 
     # running it from a Shell
     ("""Run from a Shell rather than with @{b}Run >NIL:@{ub} (on AROS
-@{b}Run >NIL: <NIL:@{ub}) and it prints what it decides, drag by drag -
-useful when something does not behave as expected.
+@{b}Run >NIL: <NIL:@{ub}) and it prints what it decides, drag by drag,
+which helps when something does not behave as expected.
 """,
      """Run from a Shell rather than from SYS:WBStartup and it prints what
-it decides, drag by drag - useful when something does not behave as
+it decides, drag by drag, which helps when something does not behave as
 expected. Stop the copy Workbench started first, with
 @{b}EdgeSnap QUIT@{ub} or from Exchange.
 """),
 
+    # the ARexx port: what the other systems need is said for them
+    ("""ARexx itself must be installed and running (RexxMast); EdgeSnap only
+needs rexxsyslib.library to open its port, and works without it. On
+MorphOS that means the ARexx interpreter installed on top of the
+system's own rexxsyslib, which has none. On AROS One the command is
+@{b}SYS:Rexxc/RX@{ub}, and its RC after a command to a port is not to be
+trusted: the trace shows the real code, and RESULT works as
+everywhere.
+""",
+     """ARexx itself must be running: @{b}SYS:System/RexxMast@{ub}, by hand
+or from SYS:WBStartup. EdgeSnap only needs rexxsyslib.library to open
+its port, and works without it. From a Shell a script runs with
+@{b}SYS:Rexxc/RX@{ub}.
+"""),
+
     # for programmers
-    ("""EdgeSnap is 0.42: a beta, complete in what it does and tested on real
+    ("""EdgeSnap is 0.5: a beta, complete in what it does and tested on real
 MorphOS hardware, on a Raspberry Pi 400 with AROS, and on AmigaOS 4,
-AROS x86_64 and AROS i386 under emulation.
+MorphOS, AROS x86_64 and AROS i386 under emulation.
 @{b}edgesnap.library@{ub} says %%LIBVER%%, and that is not a mistake: a
 """,
-     """EdgeSnap is 0.42: a beta, complete in what it does and tested on
+     """EdgeSnap is 0.5: a beta, complete in what it does and tested on
 AmigaOS 3.2, on real hardware and under emulation, and on 3.1 under
 emulation.
 @{b}edgesnap.library@{ub} says %%LIBVER%%, and that is not a mistake: a
