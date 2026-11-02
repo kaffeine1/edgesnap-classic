@@ -120,9 +120,9 @@ first gesture is the drag.
 
 ## Status
 
-![The preferences window on MorphOS: settings grouped into sections, the zone grid, docks and margins](docs/screenshots/prefs-morphos.jpg)
+![The preferences window on AmigaOS 3.2: settings grouped into sections, the zones, the push against an edge, docks and margins](docs/screenshots/prefs-amigaos3.png)
 
-*The MorphOS preferences window (MUI), version 0.2. The AmigaOS 4 window is the same sections in ReAction: both are generated from one settings table.*
+*The preferences window on AmigaOS 3.2.3 (GadTools, 640x256), version 0.51. On AmigaOS 4, MorphOS and AROS the same sections are drawn in ReAction or MUI: every window is generated from one settings table.*
 
 - **0.51 (2026-10-28):** how far the mouse must push a window held at
   an edge before that counts as the edge is now a setting, "Push against
