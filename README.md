@@ -1,7 +1,56 @@
-# EdgeSnap
+# EdgeSnap classic
 
 **Author:** Michele Dipace <michele.dipace@kaffeine.net>
 **License:** MIT (see [LICENSE](LICENSE))
+
+EdgeSnap for the classic Amiga: AmigaOS 2.04 and later on the 68000 and
+up, with or without a graphics card, tested on AmigaOS 3.2.3 and 3.1.
+Drag a window by its title bar until the pointer touches a screen edge
+or corner: a frame shows where it will land, and letting go fills that
+half or quarter of the screen. Docks are kept clear, two windows side
+by side share a seam that resizes both, and hotkeys and an ARexx port
+do the same from the keyboard and from scripts.
+
+This repository is the classic lane of
+[EdgeSnap](https://github.com/kaffeine1/edgesnap), the same project on
+AmigaOS 4, MorphOS and AROS. It follows that repository: the shared
+code, the engine and the library come from there by merge, and what
+is classic lives here.
+
+## What is different here
+
+- `edgesnap.library` for 68k, with the jump table of
+  `library/morphos/edgesnap_lib.fd`, register gates and its own
+  version numbers, always above the release it comes from (the history
+  is in `include/edgesnap_types.h`).
+- The preferences on GadTools (`prefs/gadtools/`), so that they run on
+  3.1 with nothing added.
+- AmigaOS 3.2 keeps windows on the screen as installed; the installer
+  turns on IControl's "Can Move Off-screen" at the first installation,
+  and the preferences turn it back. Where windows stop at the edge, the
+  push against an edge (PUSHPX) counts the mouse's own travel instead.
+- The glide is off as installed, the preview frame is drawn into the
+  screen's memory in the accent colour, and MCP on AmiKit is told to
+  leave windows to Intuition while EdgeSnap runs.
+
+## Building
+
+- [m68k-amigaos-gcc](https://github.com/AmigaPorts/m68k-amigaos-gcc)
+  6.5 with libnix and the NDK 3.2, plus `fd2sfd` and `sfdc`, in
+  `~/amiga-dev/toolchain/bin` (or on the `PATH`).
+- `scripts/build-m68k.sh` builds the library, the commodity, the
+  preferences and the tools into `build/m68k/`.
+- `gmake -f Makefile.host test` runs the host tests of the core.
+- `scripts/make-release-68k.sh` checks the versions, runs the tests and
+  packs `build/EdgeSnap-68k-<version>.lha` with the Installer, the guide
+  derived from the shared one (`scripts/derive-68k-guide.py`) and the
+  readme.
+
+Reports about the classic systems go to this repository's issues.
+
+---
+
+The rest of this file is the shared project's README.
 
 Windows/macOS-style window snapping for AmigaOS 4.x, MorphOS and AROS
 (x86_64, aarch64 and i386): drag a window against a screen edge or corner to
