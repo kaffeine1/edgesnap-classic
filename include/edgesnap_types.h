@@ -179,6 +179,19 @@
  *   2.26 - the classic systems only: the other systems' 2.25, with the
  *       classic choices and the classic 2.25 kept. The number moves so
  *       that it stays above both.
+ *   2.26 - elsewhere: ES_OPT_PushPx sets the push against an edge, or
+ *       turns it off. No vector.
+ *   2.27 - elsewhere: an exclusion belongs to the window, by its
+ *       serial, and a window opened where a closed one was no longer
+ *       inherits it or its serial once the engine has seen the close.
+ *       No vector.
+ *   2.28 - the classic systems only: the other systems' 2.27, with the
+ *       classic choices kept. ES_OPT_PushPx is the distance of the push
+ *       where windows may not leave the screen, 24 as it comes, and 0
+ *       turns it off there too; where they may leave, the push stays
+ *       off whatever it says. The outline of a classic drag is judged
+ *       as the other systems now judge any window whose box has not
+ *       moved.
  */
 #define ES_API_VERSION       2
 /* A client that uses a vector appended after 2.2 must check that the

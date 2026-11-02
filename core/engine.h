@@ -50,8 +50,6 @@ typedef struct ESEngineConfig {
     int drag_min_px;  /* pointer travel needed to call it a drag        */
     unsigned zones_mask; /* ES_ZONEBIT() set of zones that react        */
     int push_px;      /* raw travel against a pinned edge = at the edge */
-    int outline_drag; /* the window moves as an outline and its box    */
-                      /* stays put: the push judges where the outline is */
 } ESEngineConfig;
 
 void es_engine_config_defaults(ESEngineConfig *cfg);

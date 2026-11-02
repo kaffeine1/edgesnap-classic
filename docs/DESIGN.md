@@ -1398,6 +1398,32 @@ of this verification.
   cover the vocabulary; the five target builds and runtime behaviour
   still need their own checks.
 
+### After 0.5
+
+**2.26, the push becomes a setting (2026-10-27).** A user on AmigaOS 4
+with screen edge resistance set in the GUI preferences (GitHub issue
+3, an X5000) asked for a way to lay a window against an edge without a
+snap. The resistance holds the window at the edge for a while, so the
+pointer stops where it has the title bar and the push of 2.7 counts
+the mouse's travel: after 24 pixels of it the zone came up, though all
+the user wanted was the window flush with the edge. The push was a
+constant of the engine. It is now `PUSHPX`, "Push against an edge" in
+Sensitivity, 0 to 200, 24 as it comes; 0 turns it off, and a window
+then snaps only when the pointer itself reaches the edge, on AmigaOS 4
+after the window has gone past the resistance. The library takes it
+as `ES_OPT_PushPx` (2.26). An older library ignores the tag, as it
+does any it does not know, and keeps 24; the commodity says so at
+startup when the setting is not 24. Nothing reads the system's
+resistance: the user chooses, as with the off-screen switch, and on
+MorphOS as delivered, where windows may not leave the screen, 0 would
+leave only the hotkeys, which the guide says. Checked in the AmigaOS
+4.1 Final Edition VM, whose Workbench screen came with a resistance of
+75 (`GUIA_OffScreenResistance`): with 24 the Shell stopped at the left
+edge and snapped to the left half; with 0 it stayed flush and kept its
+size; pushed on past the resistance it went over the edge, the pointer
+reached it and it snapped. The preferences window shows the setting
+and writes it.
+
 ### 2.5 - what a tiling client asked for first
 
 The first client beyond the commodity announced itself on 2026-09-04: a
@@ -1573,6 +1599,19 @@ Four structural changes. Each one moves a public signature, which is why
    are swept whenever the list is touched. A form that cannot be
    inherited at all needs window identity the library does not have,
    and stays on this list.
+   *Library 2.27 (2026-10-30): exclusions are held by serial, the
+   identity of 2.6, and the engine retires the identity of every window
+   that is gone with each input it is fed. The first try held them by
+   serial alone and failed in the AmigaOS 4 VM exactly as 2.26 did: a
+   window closed and another opened at once gets the same memory back,
+   its address AND its layer, so the reuse the identity called rare is
+   the normal case, and it took the closed one's serial. That hit the
+   groups and the seam tokens too. With the look on every input, a
+   window opened after the pointer has moved is told apart (esnaptest:
+   B at A's very address, not excluded, snaps). What stays is a window
+   opened in place of another with nothing in between, in practice a
+   program reopening its own window; the header says so. Nothing short
+   of Intuition can do better without patching it.*
 
 ### 1.0
 

@@ -15,6 +15,12 @@ design and roadmap. The long-term target is an upstream-quality
 commodity is the first client and reference implementation of that library,
 not the product boundary.
 
+<!-- patreon-support:start -->
+## Support development
+
+EdgeSnap remains free and open source. You can [support my development work on Patreon](https://www.patreon.com/c/kaffeine1) to help fund testing, documentation and time spent improving it. No subscription is required to use the software, and public code, releases and articles remain available to everyone.
+<!-- patreon-support:end -->
+
 ## Product direction
 
 EdgeSnap is being developed as shared window-management infrastructure for
@@ -69,6 +75,21 @@ first gesture is the drag.
 
 *The MorphOS preferences window (MUI), version 0.2. The AmigaOS 4 window is the same sections in ReAction: both are generated from one settings table.*
 
+- **0.51 (2026-10-28):** how far the mouse must push a window held at
+  an edge before that counts as the edge is now a setting, "Push against
+  an edge" in the preferences (`PUSHPX`, 24 pixels as before), and 0
+  turns the push off. On AmigaOS 4 with edge resistance set in the GUI
+  preferences, the window rests at the edge for a while, and the push
+  used to snap it when it was only meant to lie against the edge; at 0
+  it snaps only once the pointer itself reaches the edge. This needs
+  `edgesnap.library` 2.26, in the package; with an older library the
+  commodity says so and keeps 24. On AROS, where a window is dragged
+  as an outline, the push never counted with off-screen moving turned
+  off in IControl, so a window taken from the middle of the screen did
+  not snap by drag; now it does. Checked on AmigaOS 4.1 under
+  emulation with edge resistance, on MorphOS on a Power Mac G5 and on
+  AROS on a Raspberry Pi 400, and in the preferences of AROS One 1.3
+  x86_64.
 - **0.5 (2026-10-25):** every hotkey can be changed on a new Hotkeys
   page of the preferences, in the icon's tooltypes or as a Shell
   argument, with an input description as Exchange writes it

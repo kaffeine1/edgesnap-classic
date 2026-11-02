@@ -11,24 +11,6 @@
 
 #include "engine.h"
 
-/* The mouse's own travel against an edge that pins the pointer counts
- * as the pointer being there after this much of it (es_push_axis); 0
- * turns it off. The classic lane builds with 0 (Makefile.m68k): from
- * AmigaOS 3.2 its first installation lets windows leave the screen
- * instead, and its library turns the push on while they may not. */
-#ifndef ES_ENGINE_PUSH_PX
-#define ES_ENGINE_PUSH_PX 24
-#endif
-
-/* 1 where Intuition drags a window as an outline and leaves its box
- * where it was until the release (the classic lane): the push then asks
- * whether the outline is flush with an edge, that is the box the drag
- * started from moved by the pointer's travel since the press. Where the
- * window itself moves, its box says. */
-#ifndef ES_ENGINE_OUTLINE_DRAG
-#define ES_ENGINE_OUTLINE_DRAG 0
-#endif
-
 static int es_abs(int v)
 {
     return v < 0 ? -v : v;
@@ -48,8 +30,7 @@ void es_engine_config_defaults(ESEngineConfig *cfg)
      */
     cfg->corner_div = 0;
     cfg->drag_min_px = 4;
-    cfg->push_px = ES_ENGINE_PUSH_PX;
-    cfg->outline_drag = ES_ENGINE_OUTLINE_DRAG;
+    cfg->push_px = 24;
     cfg->zones_mask = ES_ZONEMASK_ALL;
 }
 
@@ -296,7 +277,8 @@ void es_engine_motion(ESEngine *e, const ESWinFacts *facts,
         int my = facts->mouse_y;
         const ESRect *u = &facts->usable;
         const ESRect *b = &facts->box;
-        ESRect outline;
+        ESRect drawn;
+        int slack = 0;
         int z, wall;
 
         /* Evidence independent of the press: the box moved from its
@@ -307,18 +289,29 @@ void es_engine_motion(ESEngine *e, const ESWinFacts *facts,
             e->followed = 1;
         }
 
-        if (e->cfg.outline_drag) {
-            /* where the outline is: see ES_ENGINE_OUTLINE_DRAG */
-            outline = e->base_box;
-            outline.x += mx - e->base_mx;
-            outline.y += my - e->base_my;
-            b = &outline;
+        /*
+         * Where the window is being drawn. Dragged as an outline (AROS
+         * as delivered, the Raspberry Pi 400, 2026-10-28) the box stays
+         * where it was until the release, and a window only held at the
+         * edge by its outline was never flush: the push never counted.
+         * Until the box has moved, the outline is the box carried by
+         * the pointer from the press. Two pixels of slack for where
+         * Intuition and we sampled the grab apart; the pointer must
+         * still stand still for a push to count.
+         */
+        drawn = *b;
+        if (!e->followed) {
+            drawn.x = e->base_box.x + (mx - e->base_mx);
+            drawn.y = e->base_box.y + (my - e->base_my);
+            slack = 2;
         }
+
         /* a pointer held back by a window that may not leave the
          * screen: see es_push_axis() */
         wall = es_push_axis(&e->push_acc_x, &e->push_wall_x,
                             facts->push_x, facts->push_y, mx == prev_mx,
-                            b->x <= u->x, b->x + b->w >= u->x + u->w,
+                            drawn.x <= u->x + slack,
+                            drawn.x + drawn.w >= u->x + u->w - slack,
                             e->cfg.push_px);
         if (wall < 0) {
             mx = u->x;
@@ -327,7 +320,8 @@ void es_engine_motion(ESEngine *e, const ESWinFacts *facts,
         }
         wall = es_push_axis(&e->push_acc_y, &e->push_wall_y,
                             facts->push_y, facts->push_x, my == prev_my,
-                            b->y <= u->y, b->y + b->h >= u->y + u->h,
+                            drawn.y <= u->y + slack,
+                            drawn.y + drawn.h >= u->y + u->h - slack,
                             e->cfg.push_px);
         if (wall < 0) {
             my = u->y;
