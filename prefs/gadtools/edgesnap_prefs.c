@@ -53,6 +53,7 @@
 
 #include "config.h"
 #include "prefs_io.h"
+#include "support.h"
 #include "icontrol_offscreen.h"
 #include "edgesnap_version.h"
 #include "edgesnap.h"
@@ -91,6 +92,25 @@ enum {
     ES_ID_PAGE,
     ES_ID_SETTING = 100,      /* + index into the table  */
     ES_ID_ZONE = 200          /* + index into zone order */
+};
+
+/* The Project menu, by its items' user data, as in the other two
+ * windows; About names this lane's repository. */
+#define ES_MID_ABOUT   1
+#define ES_MID_SUPPORT 2
+#define ES_MID_QUIT    3
+#define ES_CLASSIC_REPO_URL "https://github.com/kaffeine1/edgesnap-classic"
+
+static struct NewMenu es_menu[] = {
+    { NM_TITLE, (STRPTR)"Project",                NULL, 0, 0, NULL },
+    { NM_ITEM,  (STRPTR)"About...",               (STRPTR)"?", 0, 0,
+                (APTR)ES_MID_ABOUT },
+    { NM_ITEM,  (STRPTR)"Support development...", NULL, 0, 0,
+                (APTR)ES_MID_SUPPORT },
+    { NM_ITEM,  NM_BARLABEL,                      NULL, 0, 0, NULL },
+    { NM_ITEM,  (STRPTR)"Quit",                   (STRPTR)"Q", 0, 0,
+                (APTR)ES_MID_QUIT },
+    { NM_END,   NULL,                             NULL, 0, 0, NULL }
 };
 
 #define ES_PAD     4          /* inside a frame, and around the columns */
@@ -132,6 +152,8 @@ struct ESPrefs {
     int page_first[ES_MAX_SETTINGS + 1];
     int pages, page, next_page;
     int action;                   /* acted on after messages are replied */
+    int menu_about, menu_support; /* the same, for the Project menu      */
+    struct Menu *menu;
     int focus;                    /* refused field, until activation works */
     struct Screen *scr;
     struct DrawInfo *dri;
@@ -780,6 +802,67 @@ static void es_focus(struct ESPrefs *p)
     }
 }
 
+/* Every item picked in one go, as Intuition chains them; the
+ * requesters wait until the messages are replied. */
+static void es_menu_pick(struct ESPrefs *p, UWORD code)
+{
+    while (code != MENUNULL) {
+        struct MenuItem *item = ItemAddress(p->menu, code);
+
+        if (item == NULL) {
+            break;
+        }
+        switch ((ULONG)GTMENUITEM_USERDATA(item)) {
+        case ES_MID_ABOUT:
+            p->menu_about = 1;
+            break;
+        case ES_MID_SUPPORT:
+            p->menu_support = 1;
+            break;
+        case ES_MID_QUIT:
+            p->action = ES_ID_CANCEL;
+            break;
+        default:
+            break;
+        }
+        code = item->NextSelect;
+    }
+}
+
+static void es_about(struct ESPrefs *p)
+{
+    struct EasyStruct es;
+
+    es.es_StructSize = sizeof(es);
+    es.es_Flags = 0;
+    es.es_Title = (UBYTE *)"About EdgeSnap Preferences";
+    es.es_TextFormat = (UBYTE *)("EdgeSnap " ES_VERSION_LABEL " ("
+                                 ES_VERSION_DATE ")\n"
+                                 "(c) 2026 Michele Dipace, MIT licence\n\n"
+                                 ES_CLASSIC_REPO_URL);
+    es.es_GadgetFormat = (UBYTE *)"OK";
+    EasyRequestArgs(p->win, &es, NULL, NULL);
+}
+
+/* The link, with a button that puts it on the clipboard. */
+static void es_support(struct ESPrefs *p)
+{
+    struct EasyStruct es;
+
+    es.es_StructSize = sizeof(es);
+    es.es_Flags = 0;
+    es.es_Title = (UBYTE *)"Support development";
+    es.es_TextFormat = (UBYTE *)(ESP_SUPPORT_TEXT "\n\n" ESP_SUPPORT_URL);
+    es.es_GadgetFormat = (UBYTE *)"Copy link|Close";
+    if (EasyRequestArgs(p->win, &es, NULL, NULL) == 1 &&
+        !esp_clip_text(ESP_SUPPORT_URL)) {
+        es.es_TextFormat = (UBYTE *)"The link could not be put on the "
+                           "clipboard.";
+        es.es_GadgetFormat = (UBYTE *)"OK";
+        EasyRequestArgs(p->win, &es, NULL, NULL);
+    }
+}
+
 /* Never replace gadgets while a message still refers to them. Actions
  * wait until this whole batch, including GadTools' context, is replied. */
 static void es_messages(struct ESPrefs *p)
@@ -825,6 +908,9 @@ static void es_messages(struct ESPrefs *p)
             if (msg->Code == 27) {             /* Esc: cancel */
                 p->action = ES_ID_CANCEL;
             }
+            break;
+        case IDCMP_MENUPICK:
+            es_menu_pick(p, msg->Code);
             break;
         default:
             break;
@@ -992,12 +1078,21 @@ static int es_run(struct ESPrefs *p)
                                       IDCMP_VANILLAKEY | IDCMP_ACTIVEWINDOW |
                                       BUTTONIDCMP | CHECKBOXIDCMP |
                                       CYCLEIDCMP | SLIDERIDCMP |
-                                      INTEGERIDCMP | STRINGIDCMP,
+                                      INTEGERIDCMP | STRINGIDCMP |
+                                      IDCMP_MENUPICK,
                             TAG_DONE);
     if (p->win == NULL) {
         printf("EdgeSnapPrefs: the window would not open (%dx%d inside)\n",
                p->inner_w, p->inner_h);
         return RETURN_FAIL;
+    }
+    /* Without its menu the window still does its job. */
+    p->menu = CreateMenus(es_menu, TAG_DONE);
+    if (p->menu != NULL &&
+        (!LayoutMenus(p->menu, p->vi, GTMN_NewLookMenus, TRUE, TAG_DONE) ||
+         !SetMenuStrip(p->win, p->menu))) {
+        FreeMenus(p->menu);
+        p->menu = NULL;
     }
     GT_RefreshWindow(p->win, NULL);
     es_draw_frames(p);
@@ -1014,6 +1109,14 @@ static int es_run(struct ESPrefs *p)
             }
         }
         es_messages(p);
+        if (p->menu_about) {
+            p->menu_about = 0;
+            es_about(p);
+        }
+        if (p->menu_support) {
+            p->menu_support = 0;
+            es_support(p);
+        }
         action = p->action;
         p->action = 0;
         if (action == ES_ID_CANCEL) {
@@ -1039,6 +1142,11 @@ static int es_run(struct ESPrefs *p)
             rc = RETURN_FAIL;
             done = 1;
         }
+    }
+    if (p->menu != NULL) {
+        ClearMenuStrip(p->win);
+        FreeMenus(p->menu);
+        p->menu = NULL;
     }
     CloseWindow(p->win);
     p->win = NULL;
