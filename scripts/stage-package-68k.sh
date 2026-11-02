@@ -61,15 +61,33 @@ GUIDE_LIBVER="2.$(sed -n 's/^#define ES_LIB_REVISION  *\([0-9]*\).*/\1/p' \
 GUIDE_CFLAGS="-DES_CONFIG_ANIMATE_DEFAULT=0" \
     "$ROOT/scripts/make-guide.sh" "$DEST/EdgeSnap.guide" "$GUIDE_IN" >/dev/null
 rm -f "$GUIDE_IN"
+# The settings' own texts come from core/config.c, shared with the
+# other systems, after the derivation: the one that names another
+# system is said here as it applies, and then the whole guide is
+# checked again.
+python3 - "$DEST/EdgeSnap.guide" <<'EOP'
+import sys
+p = sys.argv[1]
+s = open(p, encoding="latin-1").read()
+old = ("because it may not leave the screen or AmigaOS 4's edge "
+       "resistance stops it,")
+if s.count(old) != 1:
+    sys.exit("stage-package-68k: the PUSHPX text changed upstream")
+s = s.replace(old, "because it may not leave the screen,")
+for word in ("MorphOS", "AROS", "AmigaOS 4"):
+    if word in s:
+        sys.exit("stage-package-68k: '%s' in the classic guide, line %d"
+                 % (word, s[:s.index(word)].count("\n") + 1))
+open(p, "w", encoding="latin-1").write(s)
+EOP
 
 cat > "$DEST/EdgeSnap.readme" <<'EOR'
 Short:        Tile windows by dragging them to an edge
 Author:       michele.dipace@kaffeine.net (Michele Dipace)
 Uploader:     michele.dipace@kaffeine.net (Michele Dipace)
 Type:         util/cdity
-Version:      0.5 (beta)
+Version:      0.51 (beta)
 Architecture: m68k-amigaos >= 2.0.4
-License:      MIT
 
 EdgeSnap gives AmigaOS 3.1 and later the window snapping of Windows and
 macOS. Drag a window by its title bar until the POINTER touches a
@@ -79,32 +97,32 @@ fills that half or quarter of the screen.
   - docks and panels are detected and never covered;
   - two windows side by side share their edge: press the seam and drag
     it, and both are resized;
-  - hotkeys for those who prefer them (ctrl alt cursor keys, ctrl alt c
-    for the middle of the screen, ctrl alt z for a selector under
-    the pointer);
+  - a snapped window dragged away from the edges gets its old size
+    back, under the pointer;
+  - hotkeys, each of which you can change: ctrl alt cursor keys, ctrl
+    alt c for the middle of the screen, ctrl alt z for a selector under
+    the pointer;
+  - an ARexx port, EDGESNAP, for scripts, dock buttons and file
+    managers;
   - it is a commodity: it starts with the system from SYS:WBStartup,
     and Exchange enables, disables or removes it like any other.
 
 The behaviour lives in edgesnap.library, not in the commodity, so any
-program can ask for the same things - the commodity is a client like
-any other. esnaptest, in the package, is a worked example.
-
-A window jumps into its zone. It can glide there instead, as on the
-other systems, and that is off as installed: 68k machines differ
-widely in speed, and without a graphics card a glide can be slow. Turn
-on "Glide into place" in the preferences if yours is quick enough.
+program can ask for the same things: the commodity is a client like any
+other. esnaptest, in the package, is a worked example. The library has
+the same calls on AmigaOS 4, MorphOS and AROS, where EdgeSnap is
+edgesnap.lha and its AROS siblings.
 
 This build is for the 68000 and later, on AmigaOS 2.04 or later, with
-or without a graphics card. It was tested on AmigaOS 3.2.3 and 3.1;
-3.1.4 should be fine, and I would like to hear how it does.
-
-THIS IS A BETA for a few testers. Please write to me about anything
-that looks wrong, with the machine, the system version and what you
-did: michele.dipace@kaffeine.net
+or without a graphics card. I tested it on AmigaOS 3.2.3 and 3.1, and
+earlier versions on an A1200, a Vampire and a PiStorm; 3.1.4 should be
+fine, and I would like to hear how it does. It is a beta: please write
+to me about anything that looks wrong, with the machine, the system
+version and what you did.
 
 TO INSTALL: double-click the Install icon. It recognises the system,
-proposes the matching build, and puts everything where it belongs:
-the library in LIBS:, the commodity and its icon in SYS:WBStartup, the
+proposes the matching build, and puts everything where it belongs: the
+library in LIBS:, the commodity and its icon in SYS:WBStartup, the
 preferences in SYS:Prefs, the manual where you say. Nothing is written
 to S:User-Startup. Updating is installing again: no reboot needed.
 
@@ -118,43 +136,14 @@ back.
 Without that setting a dragged window stops at the edge and holds the
 pointer back: until the restart, if you turn the setting off, and on
 AmigaOS 3.1 and earlier, which do not have it. There push the mouse on
-a little further against the edge and the frame comes up.
+a little further against the edge and the frame comes up. How far is
+"Push against an edge" in the preferences (PUSHPX, 24 pixels as it
+comes); 0 turns the push off.
 
-Every hotkey can now be changed on a new Hotkeys page of the
-preferences, in the icon's tooltypes or as a Shell argument, with an
-input description as Exchange writes it (HOTKEYLEFT=ctrl alt
-cursor_left); none, or an empty field, leaves an action without a key.
-The keys as they come are the ones of 0.42. The four quarters get
-actions of their own (HOTKEYTOPLEFT and so on), with no key until you
-give them one, and CX_POPKEY (also POPKEY) opens the preferences, as
-Exchange's Show button does. The preferences window has two pages,
-Snapping and Hotkeys; it refuses a key the system does not understand,
-or two actions on the same key, with a requester, while the commodity
-skips such a key and says so in its output instead of not starting.
-Keys change at once when the preferences are saved, without a restart.
-
-An ARexx port, EDGESNAP, lets a script, a dock button or a file manager
-do what the hotkeys do: SNAP (LEFT RIGHT MAXIMIZE TOPLEFT TOPRIGHT
-BOTTOMLEFT BOTTOMRIGHT CENTRE), RESTORE, QUERY (RESULT is where the
-window is snapped), SELECT, PREFS, ENABLE, DISABLE, VERSION, HELP and
-QUIT, on the active window or on another window matched by a TITLE
-AmigaDOS pattern, for example rx "ADDRESS EDGESNAP 'SNAP LEFT'". ARexx
-must be running (SYS:System/RexxMast); without rexxsyslib.library
-EdgeSnap simply has no port.
-
-A snapped window that you drag away by its title bar, and let go away
-from the edges, gets back the size it had before it was snapped, under
-the pointer, as on Windows. "Old size when dragged away" in the
-preferences turns that off.
-
-A seam between windows kept apart by a gap, as a tiling window manager
-lays them out, keeps the gap when dragged, and the whole gap can be
-grabbed, not only a thin strip in its middle.
-
-A corner is now the corner itself. If you saved EdgeSnap's preferences
-with an earlier version, they may keep the corner size they had then,
-4, a band along each side: set Corner size to 0 in SYS:Prefs/EdgeSnap
-for the corners as they come now.
+A window jumps into its zone. It can glide there instead, and that is
+off as installed: 68k machines differ widely in speed, and without a
+graphics card a glide can be slow. Turn on "Glide into place" in the
+preferences if yours is quick enough.
 
 On AmiKit, MCP can move windows itself, whole, and then a dragged
 window never snaps. While EdgeSnap runs it turns that off, for this
@@ -163,7 +152,12 @@ how to keep MCP's way instead.
 
 The icons are by Carlo Spadoni, who drew them for EdgeSnap.
 
-Full documentation is in EdgeSnap.guide.
+Full documentation is in EdgeSnap.guide. EdgeSnap is MIT licensed; the
+source is at https://github.com/kaffeine1/edgesnap-classic
+
+Support my work on Patreon. Contributions are voluntary; no
+subscription is required to use this software.
+https://www.patreon.com/c/kaffeine1
 EOR
 
 # The template is the same as the one scripts/stage-package.sh writes
@@ -183,6 +177,8 @@ cat > "$DEST/EdgeSnap.prefs" <<'EOR'
 # CORNERDIV   0: a corner only where the pointer is pushed into it
 #             (default); 2..16: a band, usable height / this
 # DRAGMINPX   pointer travel before a drag counts (default 4)
+# PUSHPX      mouse travel against an edge that holds the window back
+#             before it counts as the edge; 0: off (default 24)
 # PREVIEW     show the zone preview frame: yes | no
 # PANELDETECT reserve dock/panel strips: yes | no
 # PANELMARGIN breathing room around a detected dock (default 8)

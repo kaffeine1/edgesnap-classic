@@ -80,8 +80,19 @@ dragging). Where it may not, the window stops at the edge and holds
 the pointer back where it has the title bar. Push the mouse on a little
 further against the edge and EdgeSnap counts the pointer as being
 there: the frame comes up and stays while you hold. For a corner, push
-on into both edges, towards the corner. The zones still answer more
-directly when the window can go on.
+on into both edges, towards the corner. AROS drags a window as an
+outline, and there the push counts where the outline is held at the
+edge. The zones still answer more directly when the window can go on.
+
+How far you push is @{b}PUSHPX@{ub}, "Push against an edge" in the
+preferences (24 pixels as it comes). The same push answers on AmigaOS
+4 when the GUI preferences give the screen edges a resistance: the
+window rests at the edge for a while before it goes on. If you only
+want to lay a window against the edge there, set it to 0 to turn the
+push off: a window then snaps only once the pointer itself reaches the
+edge, after the window has gone past the resistance. Where windows may
+not leave the screen at all, 0 leaves a drag nothing to snap to; the
+hotkeys still snap.
 
 MorphOS as delivered keeps windows on the screen, so the first
 installation there chooses IControl's "allow positioning beyond the
@@ -121,6 +132,13 @@ EdgeSnap counts the mouse's own travel instead. Drag the window against
 the edge, push the mouse on a little further, and the frame comes up
 and stays while you hold. For a corner, push on into both edges,
 towards the corner.
+
+How far you push is @{b}PUSHPX@{ub}, "Push against an edge" in the
+preferences (24 pixels as it comes). Set it to 0 to turn the push off:
+a drag then snaps only where the pointer itself reaches the edge, so
+where windows stop at the edge it has nothing to snap to; the hotkeys
+still snap. Where windows move off-screen the push does not count,
+whatever PUSHPX says: the pointer gets to the edge by itself.
 
 @{b}MCP and windows that move whole@{ub}
 MCP, part of AmiKit, can move and size windows itself, contents and
@@ -185,12 +203,12 @@ its port, and works without it. From a Shell a script runs with
 """),
 
     # for programmers
-    ("""EdgeSnap is 0.5: a beta, complete in what it does and tested on real
+    ("""EdgeSnap is 0.51: a beta, complete in what it does and tested on real
 MorphOS hardware, on a Raspberry Pi 400 with AROS, and on AmigaOS 4,
 MorphOS, AROS x86_64 and AROS i386 under emulation.
 @{b}edgesnap.library@{ub} says %%LIBVER%%, and that is not a mistake: a
 """,
-     """EdgeSnap is 0.5: a beta, complete in what it does and tested on
+     """EdgeSnap is 0.51: a beta, complete in what it does and tested on
 AmigaOS 3.2, on real hardware and under emulation, and on 3.1 under
 emulation.
 @{b}edgesnap.library@{ub} says %%LIBVER%%, and that is not a mistake: a
@@ -200,6 +218,10 @@ aros64, aarch64 or i386), is a small client that opens the library and
 drives the whole API""",
      """@{b}esnaptest@{ub}, in the m68k drawer of this package, is a small
 client that opens the library and drives the whole API"""),
+
+    # the reports go to this lane's own repository
+    ("  https://github.com/kaffeine1/edgesnap/issues\n",
+     "  https://github.com/kaffeine1/edgesnap-classic/issues\n"),
 ]
 
 
