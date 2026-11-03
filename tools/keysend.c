@@ -37,6 +37,10 @@
  *                                          button held: a hand pushing a
  *                                          window against an edge
  *   keysend IUP                            the button released
+ *   keysend IMENU x0 y0 x1 y1              the menu button pressed at
+ *                                          (x0, y0), the pointer taken
+ *                                          to (x1, y1), released there:
+ *                                          a menu item picked
  *   keysend WINBOX "title" x y w h         put the window of that title,
  *                                          on the default public screen,
  *                                          at that place and size
@@ -372,6 +376,63 @@ static void in_push(int dx, int dy)
     in_send(&ev);
 }
 
+/* The pointer at a pixel with the menu button held, and the button
+ * itself: what IMENU picks a menu item with. */
+static void in_at_menu(int x, int y)
+{
+    static struct InputEvent ev;
+    static struct IEPointerPixel pp;
+
+    memset(&ev, 0, sizeof(ev));
+    pp.iepp_Screen = g_iscr;
+    pp.iepp_Position.X = (WORD)x;
+    pp.iepp_Position.Y = (WORD)y;
+    ev.ie_Class = IECLASS_NEWPOINTERPOS;
+    ev.ie_SubClass = IESUBCLASS_PIXEL;
+    ev.ie_Code = IECODE_NOBUTTON;
+    ev.ie_Qualifier = IEQUALIFIER_RBUTTON;
+    ev.ie_EventAddress = &pp;
+    in_send(&ev);
+}
+
+static void in_menu_button(int down)
+{
+    static struct InputEvent ev;
+
+    memset(&ev, 0, sizeof(ev));
+    ev.ie_Class = IECLASS_RAWMOUSE;
+    ev.ie_Code = down ? IECODE_RBUTTON : (IECODE_RBUTTON | IECODE_UP_PREFIX);
+    ev.ie_Qualifier = IEQUALIFIER_RELATIVEMOUSE |
+                      (down ? IEQUALIFIER_RBUTTON : 0);
+    in_send(&ev);
+}
+
+static void imenu(int x0, int y0, int x1, int y1)
+{
+    int i;
+
+    if (!in_open(0)) {
+        return;
+    }
+    in_at(x0, y0, 0);
+    Delay(10);
+    in_menu_button(1);
+    Delay(25);
+    /* along the menu bar first, then down the menu, as a hand goes */
+    for (i = 1; i <= 6; i++) {
+        in_at_menu(x0 + (x1 - x0) * i / 6, y0);
+        Delay(4);
+    }
+    for (i = 1; i <= 6; i++) {
+        in_at_menu(x1, y0 + (y1 - y0) * i / 6);
+        Delay(4);
+    }
+    Delay(25);
+    in_menu_button(0);
+    Delay(10);
+    in_close();
+}
+
 static void idrag(int x0, int y0, int x1, int y1, int steps, int add,
                   int hold)
 {
@@ -624,6 +685,8 @@ int main(int argc, char **argv)
         screens();
     } else if (same(argv[1], "OFFSCREEN")) {
         offscreen();
+    } else if (same(argv[1], "IMENU") && argc >= 6) {
+        imenu(atoi(argv[2]), atoi(argv[3]), atoi(argv[4]), atoi(argv[5]));
     } else if (same(argv[1], "IDRAG") && argc >= 6) {
         int steps = 12, add = 0, hold = 0, k;
 
