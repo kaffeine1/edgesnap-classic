@@ -158,6 +158,9 @@ source is at https://github.com/kaffeine1/edgesnap-classic
 Support my work on Patreon. Contributions are voluntary; no
 subscription is required to use this software.
 https://www.patreon.com/c/kaffeine1
+
+If you prefer a one-time contribution, you can support my work on
+Ko-fi: https://ko-fi.com/kaffeine1
 EOR
 
 # The template is the same as the one scripts/stage-package.sh writes
