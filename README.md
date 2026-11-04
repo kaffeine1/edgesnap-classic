@@ -28,6 +28,17 @@ the other Amiga-like systems. It follows that repository: the shared
 code, the engine and the library come from there by merge, and what is
 classic lives here.
 
+## AmigaOS 3.x on the 68k
+
+The classic Amiga has its own repository,
+[EdgeSnap classic](https://github.com/kaffeine1/edgesnap-classic): the
+same engine and the same library, for AmigaOS 3.1 and later (it starts
+on 2.04) on any 68000 or later, with or without a graphics card, with
+preferences in GadTools. It follows this repository release by release,
+and its package is on Aminet as `util/cdity/edgesnap.m68k-amigaos.lha`.
+Reports about the 68k build go to
+[its issues](https://github.com/kaffeine1/edgesnap-classic/issues).
+
 <!-- patreon-support:start -->
 ## Support development
 
