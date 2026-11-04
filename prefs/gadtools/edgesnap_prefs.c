@@ -100,9 +100,6 @@ enum {
 #define ES_MID_SUPPORT 2
 #define ES_MID_QUIT    3
 #define ES_CLASSIC_REPO_URL "https://github.com/kaffeine1/edgesnap-classic"
-/* Support names Ko-fi as well, for a single contribution: here only, so
- * support.h stays as the other systems have it. */
-#define ES_KOFI_URL "https://ko-fi.com/kaffeine1"
 
 static struct NewMenu es_menu[] = {
     { NM_TITLE, (STRPTR)"Project",                NULL, 0, 0, NULL },
@@ -856,9 +853,7 @@ static void es_support(struct ESPrefs *p)
     es.es_StructSize = sizeof(es);
     es.es_Flags = 0;
     es.es_Title = (UBYTE *)"Support development";
-    es.es_TextFormat = (UBYTE *)(ESP_SUPPORT_TEXT "\n\n" ESP_SUPPORT_URL
-                                 "\n\nFor a one-time contribution, Ko-fi:\n\n"
-                                 ES_KOFI_URL);
+    es.es_TextFormat = (UBYTE *)ESP_SUPPORT_BODY;
     es.es_GadgetFormat = (UBYTE *)"Copy Patreon link|Copy Ko-fi link|Close";
     /* 1 and 2 count the buttons from the left; Close, the last, is 0 */
     switch (EasyRequestArgs(p->win, &es, NULL, NULL)) {
@@ -866,7 +861,7 @@ static void es_support(struct ESPrefs *p)
         url = ESP_SUPPORT_URL;
         break;
     case 2:
-        url = ES_KOFI_URL;
+        url = ESP_KOFI_URL;
         break;
     }
     if (url != NULL && !esp_clip_text(url)) {
