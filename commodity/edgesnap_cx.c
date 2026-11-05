@@ -407,6 +407,19 @@ struct SpikeShared {
 
 static struct SpikeShared g_shared;
 
+#ifdef ES_CLASSIC
+/*
+ * MCP's solid window moving, on AmiKit, keeps the press on a title bar
+ * for itself and lets the moves and the release through, the moves with
+ * the left button in their qualifier (Jan Zahurancik of AmiKit told me
+ * how DeskControl copes, 2026-11-05). So the first move with the button
+ * held and no press seen counts as the press. Moves only: a press
+ * carries the button in its qualifier as well, and counts by its code.
+ */
+#define SPIKE_HELD_WITHOUT_PRESS(ie) \
+    (!g_shared.held && ((ie)->ie_Qualifier & IEQUALIFIER_LEFTBUTTON))
+#endif
+
 /*
  * CxCustom action. RULES: no Intuition calls, no allocations, no waiting.
  * Bump a counter, Signal() the main task, get out.
@@ -455,6 +468,12 @@ static void spike_cx_action(CxMsg *msg, CxObj *obj)
     if (ie->ie_Class == IECLASS_NEWPOINTERPOS ||
         ie->ie_Class == IECLASS_POINTERPOS) {
         g_shared.quals = ie->ie_Qualifier;
+#ifdef ES_CLASSIC
+        if (SPIKE_HELD_WITHOUT_PRESS(ie)) {
+            g_shared.held = 1;
+            g_shared.presses++;
+        }
+#endif
         g_shared.moves++;
         engine = g_shared.engine_task;
         if (engine != NULL && g_shared.armed) {
@@ -516,6 +535,12 @@ static void spike_cx_action(CxMsg *msg, CxObj *obj)
         g_shared.held = 0;
         g_shared.releases++;
     } else if (ie->ie_Code == IECODE_NOBUTTON) {
+#ifdef ES_CLASSIC
+        if (SPIKE_HELD_WITHOUT_PRESS(ie)) {
+            g_shared.held = 1;
+            g_shared.presses++;
+        }
+#endif
         /* a relative device reports how far the mouse went, whether
          * or not Intuition let the pointer follow: that is what tells
          * a pinned pointer from one that stopped */
