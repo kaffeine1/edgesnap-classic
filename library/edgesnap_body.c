@@ -54,6 +54,9 @@
  * the screen: see esb_classic_offscreen(). */
 #define ESB_CLASSIC_PUSH 1
 #include "icontrol.h"
+/* A window partly off the screen is moved back before it is resized:
+ * see esb_bring_on_screen(). */
+#define ESB_CLASSIC_ONSCREEN 1
 #endif
 
 #define ESB_EXCLUDE_SLOTS 16
@@ -832,14 +835,87 @@ static int esb_glide_step(struct Window *win, const ESRect *was,
     return 1;
 }
 
+#ifdef ESB_CLASSIC_ONSCREEN
+/*
+ * On AmigaOS 3.2 (intuition 47, layers 46) ChangeWindowBox() of a
+ * window that stands partly off the screen loses what was off it: a
+ * smart refresh window gets that part back blank or scrambled, and its
+ * application is not asked to draw it again. MoveWindow() keeps it.
+ * Where windows may move off-screen, a drag to an edge leaves the
+ * window partly off the screen at the release, so every snap there met
+ * this: DOpus listers on AmiKit came back with half a toolbar or a
+ * rectangle of noise (PiStorm, 2026-11-06, the same with ChangeWindowBox
+ * alone and no EdgeSnap running). So such a window is first moved, at
+ * its own size, to where it fits, as near its new place as it can be,
+ * and resized from there. `at` is where it stands, and is updated.
+ */
+static void esb_bring_on_screen(struct Window *win, const ESRect *to,
+                                ESRect *at)
+{
+    ULONG ilock;
+    int sw, sh, nx, ny, i;
+
+    ilock = LockIBase(0);
+    if (!esb_window_open_locked(win) || win->WScreen == NULL) {
+        UnlockIBase(ilock);
+        return;
+    }
+    sw = (int)win->WScreen->Width;
+    sh = (int)win->WScreen->Height;
+    UnlockIBase(ilock);
+    if (at->x >= 0 && at->y >= 0 && at->x + at->w <= sw &&
+        at->y + at->h <= sh) {
+        return;
+    }
+    nx = to->x;
+    ny = to->y;
+    if (nx > sw - at->w) {
+        nx = sw - at->w;
+    }
+    if (ny > sh - at->h) {
+        ny = sh - at->h;
+    }
+    if (nx < 0) {
+        nx = 0;
+    }
+    if (ny < 0) {
+        ny = 0;
+    }
+    if (nx == at->x && ny == at->y) {
+        return;
+    }
+    MoveWindow(win, nx - at->x, ny - at->y);
+    /* asynchronous like ChangeWindowBox(): the resize that follows is
+     * queued behind it, but the glide reasons from where it stands */
+    for (i = 0; i < 10; i++) {
+        ESRect live;
+
+        Delay(1);
+        if (!esb_live_box(win, &live)) {
+            return;
+        }
+        if (live.x != at->x || live.y != at->y) {
+            *at = live;
+            return;
+        }
+    }
+}
+#endif
+
 static void esb_glide_box(struct Window *win, const ESRect *from,
                           const ESRect *to, int may_raise)
 {
-    ESRect at = *from;
-    int steps = g_cfg.animate ? es_glide_steps(from, to) : 0;
+    ESRect start = *from;
+    ESRect at;
+    int steps;
     ULONG ilock;
     int i, covered;
 
+#ifdef ESB_CLASSIC_ONSCREEN
+    esb_bring_on_screen(win, to, &start);
+#endif
+    at = start;
+    steps = g_cfg.animate ? es_glide_steps(&start, to) : 0;
     ilock = LockIBase(0);
     if (!esb_window_open_locked(win)) {
         UnlockIBase(ilock);
@@ -854,7 +930,7 @@ static void esb_glide_box(struct Window *win, const ESRect *from,
     for (i = 1; i < steps; i++) {
         ESRect r, live;
 
-        es_glide_rect(from, to, i, steps, &r);
+        es_glide_rect(&start, to, i, steps, &r);
         /* where it is, not where it was asked to be: the next box and
          * the AROS repaint dance both reason from here */
         if (!esb_glide_step(win, &at, &r, i == 1 ? 10 : 3, &live)) {
@@ -926,8 +1002,16 @@ static int esb_change_box(struct Window *win, const ESRect *from,
         }
     }
 #else
-    (void)from;
     (void)may_raise;
+#ifdef ESB_CLASSIC_ONSCREEN
+    {
+        ESRect at = *from;
+
+        esb_bring_on_screen(win, to, &at);
+    }
+#else
+    (void)from;
+#endif
 #endif
     if (!esb_live_box(win, NULL)) {
         return 0;
