@@ -356,8 +356,21 @@ static const char es_version_cookie[] __attribute__((used)) =
 /* How near the pointer must come for the seam to show itself, and how
  * far it must go for the seam to disappear again. The two differ so a
  * pointer resting on the boundary does not blink. */
+#ifdef ES_CLASSIC
+/*
+ * On AmigaOS 3.x the seam lights up only where it can be grabbed. The
+ * handle is a window ten pixels wide, and a press beside it goes to the
+ * window underneath: with three pixels of lead the line was lit where a
+ * press went to the lister below, and the first try at the seam moved
+ * nothing (AmiKit on the PiStorm, 2026-11-06). For the same reason it
+ * goes out as soon as the pointer leaves it.
+ */
+#define ES_SEAM_SHOW_PX 0
+#define ES_SEAM_HIDE_PX 1
+#else
 #define ES_SEAM_SHOW_PX  3
 #define ES_SEAM_HIDE_PX 14
+#endif
 
 /*
  * Written by the CxCustom action in input.device context, read by the main
@@ -2681,10 +2694,7 @@ static struct Hook g_divider_backfill = {
 #endif
 
 /* How near the pointer must come for the seam to show itself, and how
- * far it must go for the seam to disappear again. The two differ so a
- * pointer resting on the boundary does not blink. */
-#define ES_SEAM_SHOW_PX  3
-#define ES_SEAM_HIDE_PX 14
+ * far it must go for the seam to disappear again: set above. */
 
 /*
  * Is scr the front screen? From 2.24 the library's divider calls look
