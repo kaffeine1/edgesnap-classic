@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: MIT
  *
  * mcp_config.h - the two lines of MCP's configuration that EdgeSnap
- * turns off while it runs: MOVEWINDOW and SIZEWINDOW, MCP's own moving
- * and sizing of windows in real time. Pure C over the file's text, so
+ * turns off while it runs when KEEPMCP=NO asks: MOVEWINDOW and
+ * SIZEWINDOW, MCP's own moving and sizing of windows in real time. Pure C over the file's text, so
  * the host tests hold it to every byte before an Amiga's ENV: sees it;
  * the commodity only reads and writes the file (spike_mcp_turn).
  */

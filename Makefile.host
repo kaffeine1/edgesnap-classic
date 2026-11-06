@@ -61,7 +61,7 @@ $(BUILD)/frame_bits_test: commodity/frame_bits.c commodity/frame_bits_test.c com
 	$(CC) $(CFLAGS) -Icommodity -o "$@" commodity/frame_bits.c commodity/frame_bits_test.c
 
 # MCP's two lines (commodity/mcp_config.c): the text EdgeSnap writes into
-# ENV: on AmiKit, held to every byte here first.
+# ENV: on AmiKit with KEEPMCP=NO, held to every byte here first.
 $(BUILD)/mcp_config_test: commodity/mcp_config.c commodity/mcp_config_test.c commodity/mcp_config.h
 	mkdir -p "$(BUILD)"
 	$(CC) $(CFLAGS) -Icommodity -o "$@" commodity/mcp_config.c commodity/mcp_config_test.c

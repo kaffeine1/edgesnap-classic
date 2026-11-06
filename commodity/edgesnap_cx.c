@@ -599,9 +599,10 @@ static int g_quit_mode;   /* QUIT argument: stop a running instance */
  */
 static LONG g_cx_pri = 0;
 
-/* KEEPMCP=YES: leave MCP's own window moving as it is (see
- * spike_mcp_borrow, the classic systems). Also the commodity's word. */
-static int g_keep_mcp;
+/* KEEPMCP=YES, the default: leave MCP's own window moving as it is;
+ * KEEPMCP=NO turns it off while EdgeSnap runs (see spike_mcp_borrow,
+ * the classic systems). Also the commodity's word. */
+static int g_keep_mcp = 1;
 
 /*
  * How QUIT reaches the instance that is already running. Commodities
@@ -963,10 +964,16 @@ static void spike_config_load(int argc, char **argv)
  * Intuition never begins its own drag, the moving window paints over
  * the preview frame, and the seam is never pressed (AmiKit for the
  * PiStorm, 2026-10-05). MCP watches ENV:MCP2/MCP.config and takes up a
- * change at once, so while EdgeSnap runs the two lines are turned off
- * there, and back on when it stops. In ENV: only: ENVARC: stays as the
- * user saved it, and a system where the two are one file is left
- * alone. KEEPMCP=YES, a tooltype or an argument, leaves MCP be.
+ * change at once, so EdgeSnap used to turn the two lines off there
+ * while it ran, and back on when it stopped.
+ *
+ * Since 2026-11-06 MCP is left alone as installed: the press it keeps
+ * is taken from the first move with the button held
+ * (SPIKE_HELD_WITHOUT_PRESS), and while a window moves whole the frame
+ * is four windows of ours (spike_bars_show). KEEPMCP=NO, a tooltype or
+ * an argument, still turns the two lines off, in ENV: only: ENVARC:
+ * stays as the user saved it, and a system where the two are one file
+ * is left alone.
  */
 #define ES_MCP_ENV    "ENV:MCP2/MCP.config"
 #define ES_MCP_ENVARC "ENVARC:MCP2/MCP.config"
@@ -1064,7 +1071,7 @@ static void spike_mcp_borrow(void)
     if (g_mcp_borrowed) {
         spike_out("edgesnap: MCP was moving windows itself (%s%s%s): "
                   "off in " ES_MCP_ENV " while EdgeSnap runs, "
-                  "KEEPMCP=YES leaves it\n",
+                  "asked by KEEPMCP=NO\n",
                   (g_mcp_borrowed & ESM_MOVEWINDOW) ? "MOVEWINDOW" : "",
                   g_mcp_borrowed == ESM_BOTH ? " " : "",
                   (g_mcp_borrowed & ESM_SIZEWINDOW) ? "SIZEWINDOW" : "");
@@ -1252,7 +1259,7 @@ static void spike_publish_ignored(void)
     struct Window *mine[6];
     int n = 0;
 
-#ifdef ES_PREVIEW_WINDOWS
+#if defined(ES_PREVIEW_WINDOWS) || defined(ES_CLASSIC)
     int i;
 
     for (i = 0; i < 4; i++) {
@@ -2219,9 +2226,16 @@ static void spike_preview_refresh(void)
 #endif
 }
 
+#ifdef ES_CLASSIC
+static void spike_bars_hide(void);   /* the frame of windows, below */
+#endif
+
 static void spike_preview_hide(void)
 {
 #if defined(ES_PREVIEW_PIXELS) || defined(ES_PREVIEW_XOR)
+#ifdef ES_CLASSIC
+    spike_bars_hide();
+#endif
     spike_pf_hide();
 #else
     int i;
@@ -2244,7 +2258,7 @@ static void spike_preview_hide(void)
 #endif
 }
 
-#ifdef ES_PREVIEW_WINDOWS
+#if defined(ES_PREVIEW_WINDOWS) || defined(ES_CLASSIC)
 static struct Window *spike_preview_bar(struct Screen *scr, LONG pen,
                                         int x, int y, int w, int h)
 {
@@ -2266,11 +2280,219 @@ static struct Window *spike_preview_bar(struct Screen *scr, LONG pen,
     }
     return win;
 }
-#endif /* ES_PREVIEW_WINDOWS */
+#endif /* ES_PREVIEW_WINDOWS || ES_CLASSIC */
+
+#ifdef ES_CLASSIC
+/*
+ * Under a solid window move (MCP on AmiKit) the window being dragged
+ * repaints itself under the frame at every step, and the XOR frame then
+ * comes down over pixels that are no longer the ones it inverted:
+ * pieces of it stay on the screen (PiStorm, 2026-11-06). There the
+ * frame is four borderless windows instead, as Jan Zahurancik of AmiKit
+ * suggested: layers keep them whole over a window that moves, and
+ * closing them refreshes what was under them. Intuition's own outline
+ * drag never moves the window before the release, and OpenWindow would
+ * wait for it, so there the XOR frame stays.
+ *
+ * Which move it is, the windows tell: where every window of the front
+ * screen stood is noted at the press, and when the frame is due, one
+ * that has moved since means the move is solid. Not the active window
+ * alone: MCP activates the window it moves when it pleases, and the
+ * first drag of an inactive one was taken for Intuition's (PiStorm,
+ * 2026-11-06). Read under LockIBase; a stored pointer is only compared
+ * with the ones in the screen's list, never followed.
+ */
+#define ES_LIVE_MAX 32
+static struct {
+    struct Window *w;
+    WORD x, y;
+} g_live[ES_LIVE_MAX];
+static int g_live_n;
+static struct Screen *g_live_scr;
+static struct Window *g_live_moved;   /* the window that moved, compared only */
+
+static int spike_live_ours(const struct Window *w)
+{
+    return spike_is_preview_win((struct Window *)w) ||
+           w == g_divider || w == g_selector;
+}
+
+static void spike_live_note(void)
+{
+    ULONG ilock = LockIBase(0);
+    struct Screen *scr = ES_IBASE->FirstScreen;
+    struct Window *w;
+
+    g_live_n = 0;
+    g_live_scr = scr;
+    g_live_moved = NULL;
+    for (w = (scr != NULL) ? scr->FirstWindow : NULL;
+         w != NULL && g_live_n < ES_LIVE_MAX; w = w->NextWindow) {
+        if (spike_live_ours(w)) {
+            continue;
+        }
+        g_live[g_live_n].w = w;
+        g_live[g_live_n].x = w->LeftEdge;
+        g_live[g_live_n].y = w->TopEdge;
+        g_live_n++;
+    }
+    UnlockIBase(ilock);
+}
+
+static int spike_live_moving(void)
+{
+    ULONG ilock = LockIBase(0);
+    struct Window *w;
+    int i, moved = 0;
+
+    if (g_live_scr != NULL && ES_IBASE->FirstScreen == g_live_scr) {
+        for (w = g_live_scr->FirstWindow; w != NULL && !moved;
+             w = w->NextWindow) {
+            for (i = 0; i < g_live_n; i++) {
+                if (g_live[i].w == w) {
+                    if (w->LeftEdge != g_live[i].x ||
+                        w->TopEdge != g_live[i].y) {
+                        moved = 1;
+                        g_live_moved = w;
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    UnlockIBase(ilock);
+    return moved;
+}
+
+/*
+ * MCP ends its move when the release reaches its own task, and the
+ * snap must not cross it: after the release of a solid move, wait for
+ * the window that moved to stay where it is for two ticks, a quarter
+ * of a second at most. The window is looked for in the screen's list
+ * each time; gone, there is nothing to wait for.
+ */
+static void spike_live_settle(void)
+{
+    WORD x = 0, y = 0;
+    int i, still = 0, have = 0;
+
+    for (i = 0; i < 12 && still < 2; i++) {
+        ULONG ilock;
+        struct Window *w;
+        WORD nx = 0, ny = 0;
+        int ok = 0;
+
+        Delay(1);
+        ilock = LockIBase(0);
+        if (g_live_scr != NULL && ES_IBASE->FirstScreen == g_live_scr) {
+            for (w = g_live_scr->FirstWindow; w != NULL; w = w->NextWindow) {
+                if (w == g_live_moved) {
+                    nx = w->LeftEdge;
+                    ny = w->TopEdge;
+                    ok = 1;
+                    break;
+                }
+            }
+        }
+        UnlockIBase(ilock);
+        if (!ok) {
+            break;
+        }
+        if (have && nx == x && ny == y) {
+            still++;
+        } else {
+            still = 0;
+        }
+        x = nx;
+        y = ny;
+        have = 1;
+    }
+    spike_log("edgesnap: solid move: window still after %d ticks at %d,%d\n",
+              i, (int)x, (int)y);
+}
+
+static void spike_bars_hide(void)
+{
+    int i;
+
+    if (!g_preview.visible) {
+        return;
+    }
+    for (i = 0; i < 4; i++) {
+        if (g_preview.bars[i] != NULL) {
+            CloseWindow(g_preview.bars[i]);
+            g_preview.bars[i] = NULL;
+        }
+    }
+    g_preview.visible = 0;
+    spike_publish_ignored();
+}
+
+/* The four bars, as thick as the XOR strips would be (spike_pf_strips),
+ * in the accent pen taken at startup on this same screen. */
+static void spike_bars_show(struct Screen *scr, const ESRect *r)
+{
+    ESRect bar[4];
+    int t = ES_FRAME_PX;
+    int i, bars, ok = 1;
+
+    if (g_preview.visible &&
+        g_preview.rect.x == r->x && g_preview.rect.y == r->y &&
+        g_preview.rect.w == r->w && g_preview.rect.h == r->h) {
+        return;
+    }
+    spike_bars_hide();
+    if (scr->Height / 120 > t) {
+        t = scr->Height / 120;
+        if (t > 8) {
+            t = 8;
+        }
+    }
+    if (r->w < 2 * t || r->h < 2 * t) {
+        t = 1;
+    }
+    bar[0].x = r->x;              bar[0].y = r->y;
+    bar[0].w = r->w;              bar[0].h = t;
+    bar[1].x = r->x;              bar[1].y = r->y + r->h - t;
+    bar[1].w = r->w;              bar[1].h = t;
+    bar[2].x = r->x;              bar[2].y = r->y + t;
+    bar[2].w = t;                 bar[2].h = r->h - 2 * t;
+    bar[3].x = r->x + r->w - t;   bar[3].y = r->y + t;
+    bar[3].w = t;                 bar[3].h = r->h - 2 * t;
+    bars = (bar[2].h > 0) ? 4 : 2;
+    for (i = 0; i < bars; i++) {
+        g_preview.bars[i] = spike_preview_bar(scr, g_accent.pen,
+                                              bar[i].x, bar[i].y,
+                                              bar[i].w, bar[i].h);
+        if (g_preview.bars[i] == NULL) {
+            ok = 0;
+        }
+    }
+    g_preview.visible = 1;   /* set before a possible hide on failure */
+    g_preview.rect = *r;
+    spike_publish_ignored();
+    if (!ok) {
+        spike_log("edgesnap: preview: OpenWindow failed, no frame\n");
+        spike_bars_hide();
+    }
+}
+#endif /* ES_CLASSIC */
 
 static void spike_preview_show(struct Screen *dragscr, const ESRect *r)
 {
 #if defined(ES_PREVIEW_PIXELS) || defined(ES_PREVIEW_XOR)
+#ifdef ES_CLASSIC
+    /* bars once the window moves solid, and for the rest of the drag */
+    if (dragscr != NULL && dragscr == g_accent.scr &&
+        (g_preview.visible || spike_live_moving())) {
+        if (!g_preview.visible) {
+            spike_log("edgesnap: preview: solid move, frame of windows\n");
+        }
+        spike_pf_hide();     /* an XOR frame shown before the move */
+        spike_bars_show(dragscr, r);
+        return;
+    }
+#endif
     spike_pf_show(dragscr, r);
 #else
     struct Screen *scr;
@@ -3536,6 +3758,12 @@ static void spike_engine_step(void)
     g_seen_moves = g_shared.moves;
     g_seen_releases = g_shared.releases;
 
+#ifdef ES_CLASSIC
+    if (new_press) {
+        spike_live_note();
+    }
+#endif
+
 #ifdef ES_SEAM_NO_WINDOW
     if (g_shared.seam_grabs != g_seen_grabs) {
         g_seen_grabs = g_shared.seam_grabs;
@@ -3645,7 +3873,16 @@ static void spike_engine_step(void)
      * where they were read, with the window still at its old place.
      */
     if (new_release && g_drag_active) {
+#ifdef ES_CLASSIC
+        int solid = g_preview.visible || spike_live_moving();
+
         spike_preview_hide();
+        if (solid) {
+            spike_live_settle();
+        }
+#else
+        spike_preview_hide();
+#endif
     }
 
     {

@@ -142,12 +142,12 @@ whatever PUSHPX says: the pointer gets to the edge by itself.
 
 @{b}MCP and windows that move whole@{ub}
 MCP, part of AmiKit, can move and size windows itself, contents and
-all: "Finestre piene: sposta" and "ridimensiona" in its preferences. It
-then keeps every press on a title bar for itself, and EdgeSnap never
-sees a drag begin. So while EdgeSnap runs it turns those two off, in
-ENV: only, and back on when it stops: MCP's saved preferences stay as
-they are. The tooltype @{b}KEEPMCP=YES@{ub} leaves MCP alone; a window
-that MCP moves is then not snapped when it reaches an edge.
+all: "Finestre piene: sposta" and "ridimensiona" in its preferences.
+EdgeSnap snaps those windows too and leaves MCP as it is. While MCP
+moves a window, the frame is made of four small windows, so the moving
+window cannot paint over it. The tooltype @{b}KEEPMCP=NO@{ub} turns
+MCP's moving and sizing off while EdgeSnap runs, in ENV: only, and
+back on when it stops: MCP's saved preferences stay as they are.
 
 @{b}CX_PRIORITY@{ub}, the tooltype every commodity takes, sets where
 EdgeSnap hears the mouse among the other commodities: 0 as it comes.

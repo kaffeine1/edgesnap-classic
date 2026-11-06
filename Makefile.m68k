@@ -66,7 +66,7 @@ CORE_SRC := core/zones.c core/panels.c core/engine.c core/registry.c \
 # core/icontrol.c: the body reads AmigaOS's off-screen setting for the push
 BODY_SRC := library/edgesnap_body.c $(CORE_SRC) core/icontrol.c
 # frame_bits.c: the classic preview frame's pixels, host-tested;
-# mcp_config.c: the two lines of MCP's configuration it borrows, too
+# mcp_config.c: the two lines of MCP's configuration KEEPMCP=NO borrows
 CX_SRC := commodity/edgesnap_cx.c commodity/frame_bits.c commodity/mcp_config.c
 HEADERS := $(wildcard core/*.h include/*.h library/*.h commodity/*.h)
 

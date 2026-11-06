@@ -145,10 +145,8 @@ off as installed: 68k machines differ widely in speed, and without a
 graphics card a glide can be slow. Turn on "Glide into place" in the
 preferences if yours is quick enough.
 
-On AmiKit, MCP can move windows itself, whole, and then a dragged
-window never snaps. While EdgeSnap runs it turns that off, for this
-session only: MCP's saved preferences are not changed. The guide says
-how to keep MCP's way instead.
+On AmiKit, MCP can move windows itself, whole. EdgeSnap snaps those
+windows too and leaves MCP's settings alone.
 
 The icons are by Carlo Spadoni, who drew them for EdgeSnap.
 

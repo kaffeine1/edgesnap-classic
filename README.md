@@ -68,9 +68,9 @@ frame comes up. The distance is "Push against an edge" (`PUSHPX`, 24
 pixels); 0 turns it off.
 
 The glide into place is off as installed, because without a graphics
-card it can be slow. On AmiKit, MCP's own window moving is turned off
-in `ENV:` while EdgeSnap runs; the tooltype `KEEPMCP=YES` leaves MCP
-alone.
+card it can be slow. On AmiKit, EdgeSnap also snaps the windows MCP
+moves whole and leaves MCP's settings alone; the tooltype `KEEPMCP=NO`
+turns MCP's moving off while EdgeSnap runs.
 
 ## Status
 
@@ -99,8 +99,9 @@ from. The library is numbered above that release's library, and
 - The preview frame is drawn by the CPU into screen memory in the
   accent colour, on AGA and graphics cards alike
   (`commodity/frame_bits.c`).
-- The glide off as installed, and MCP handled on AmiKit
-  (`commodity/mcp_config.c`).
+- The glide off as installed. On AmiKit, while MCP moves a window
+  whole, the frame is four small windows; `KEEPMCP=NO` turns MCP's
+  moving off instead (`commodity/mcp_config.c`).
 - The guide is the shared one with the passages that differ replaced
   at build time (`scripts/derive-68k-guide.py`). A shared passage that
   changes stops the build until the replacement is updated.
