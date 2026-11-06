@@ -122,6 +122,11 @@ It is the box @{b}Can Move Off-screen@{ub} in
 too, as @{b}Windows can move off-screen@{ub}: that is where to turn it
 back.
 
+On AmiKit, and wherever MCP is installed, the installer leaves the
+setting off. A DOpus lister moved past the edge there comes back with
+noise where it was off the screen, so windows stay on it and the push
+described below snaps instead.
+
 Changing it makes AmigaOS ask to reset the Workbench screen, naming the
 windows to close first. Close them and press Retry, or press Cancel and
 let it take effect at the next start.

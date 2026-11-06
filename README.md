@@ -60,7 +60,9 @@ reboot.
 keeps windows on the screen as installed, and a window dragged against
 an edge holds the pointer back. The installer turns on IControl's "Can
 Move Off-screen", which takes effect at the next start. EdgeSnap's
-preferences can turn it off again.
+preferences can turn it off again. On AmiKit, and wherever MCP is
+installed, the installer leaves it off: there a DOpus lister moved past
+the edge comes back with noise where it was off the screen.
 
 Where windows stop at the edge (on 3.1 and earlier, or with that
 setting off) push the mouse a little further against the edge and the
@@ -94,8 +96,9 @@ from. The library is numbered above that release's library, and
   (`library/m68k/`).
 - Preferences in GadTools (`prefs/gadtools/`), so they run on 3.1 with
   nothing added.
-- "Can Move Off-screen" turned on at the first installation. The push
-  against an edge counts only where windows cannot leave the screen.
+- "Can Move Off-screen" turned on at the first installation, except on
+  AmiKit and wherever MCP is installed. The push against an edge counts
+  only where windows cannot leave the screen.
 - The preview frame is drawn by the CPU into screen memory in the
   accent colour, on AGA and graphics cards alike
   (`commodity/frame_bits.c`).

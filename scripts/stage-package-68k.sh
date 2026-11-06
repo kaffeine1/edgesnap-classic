@@ -133,6 +133,10 @@ dragged window goes on past the edge, and the pointer reaches the edge.
 The installer says so, and EdgeSnap's preferences turn the setting
 back.
 
+On AmiKit, and wherever MCP is installed, the installer leaves that
+setting off: there a DOpus lister moved past the edge comes back with
+noise where it was off the screen. The push below snaps instead.
+
 Without that setting a dragged window stops at the edge and holds the
 pointer back: until the restart, if you turn the setting off, and on
 AmigaOS 3.1 and earlier, which do not have it. There push the mouse on

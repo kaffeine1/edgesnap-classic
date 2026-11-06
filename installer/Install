@@ -359,11 +359,21 @@
 ; resetting the Workbench screen appears in the middle of installing.
 ; An update leaves it alone: whoever turned it back meant it.
 ; EdgeSnap's preferences program does the work, and has the box.
+;
+; Not on AmiKit, or wherever MCP is installed. MCP moves and sizes
+; windows whole, and a DOpus lister partly off the screen loses what is
+; drawn there: snapped back from past the edge, it came up with a
+; rectangle of noise (AmiKit on the PiStorm, 2026-11-06). With windows
+; kept on the screen that never happens, and the push snaps instead.
+; #onscreen says the setting was found off and left so.
+(set #onscreen 0)
 (if (= #system 4)
     (if (= #update 0)
         (if (= (run "SYS:Prefs/EdgeSnap >NIL: OFFSCREEN QUERY BOOTONLY" (safe)) 5)
-            (if (= (run "SYS:Prefs/EdgeSnap >NIL: OFFSCREEN ON BOOTONLY") 0)
-                (set #offscreen 1)))))
+            (if (or (exists "AmiKit:" (noreq)) (exists "ENV:MCP2/MCP.config"))
+                (set #onscreen 1)
+                (if (= (run "SYS:Prefs/EdgeSnap >NIL: OFFSCREEN ON BOOTONLY") 0)
+                    (set #offscreen 1))))))
 
 ; --- start it with the system ---------------------------------------
 ; Not on AROS. EdgeSnap starts from SYS:WBStartup there and needs no
@@ -559,6 +569,16 @@
                "the screen while held.\n\n"
                "To have it as it was: SYS:Prefs/EdgeSnap, the box "
                "\"Windows can move off-screen\", or IControl."))
+      (all)))
+(if (= #onscreen 1)
+    (message
+      (cat "On AmiKit, and wherever MCP is installed, windows stay on the screen.\n\n"
+           "MCP moves windows whole, and a DOpus lister moved past the "
+           "edge of the screen comes back with noise where it was off "
+           "it. So EdgeSnap leaves the setting of AmigaOS that lets "
+           "windows move off-screen as it is: off.\n\n"
+           "Drag a window against an edge and push the mouse on a "
+           "little further: the frame comes up.")
       (all)))
 
 ; (quiet): our own closing text says what happened - the Installer's
