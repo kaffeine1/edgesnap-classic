@@ -171,6 +171,9 @@ to an edge or corner.
 adds the type, the stack, the tooltypes and the planar image older
 icon.library versions show.
 
+**Jan Zahurancik** of AmiKit explained to me how to follow a drag when
+MCP's solid window moving keeps the press for itself.
+
 ## Reports
 
 Open an issue on

@@ -219,6 +219,17 @@ drives the whole API""",
      """@{b}esnaptest@{ub}, in the m68k drawer of this package, is a small
 client that opens the library and drives the whole API"""),
 
+    # who helped with MCP, which only AmigaOS 3.x has
+    ("""The icons are by @{b}Carlo Spadoni@{ub}, who drew them for EdgeSnap
+and let me ship them with it.
+""",
+     """The icons are by @{b}Carlo Spadoni@{ub}, who drew them for EdgeSnap
+and let me ship them with it.
+
+@{b}Jan Zahurancik@{ub}, of AmiKit, explained to me how to follow a
+drag when MCP's solid window moving keeps the press for itself.
+"""),
+
     # the reports go to this lane's own repository
     ("  https://github.com/kaffeine1/edgesnap/issues\n",
      "  https://github.com/kaffeine1/edgesnap-classic/issues\n"),
