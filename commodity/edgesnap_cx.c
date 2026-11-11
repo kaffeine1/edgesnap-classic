@@ -230,6 +230,7 @@ static void spike_pf_drop_now(void);    /* from the input handler */
  * RastPort in the middle, the format last.
  */
 #ifdef ES_PREVIEW_PIXELS
+#include <prefs/icontrol.h>    /* ICB_OPAQUEMOVE: is the frame carried off */
 #define ES_PF_FORMAT PIXF_A8R8G8B8
 #define ES_PF_READ(rp, x, y, buf, mod, w, h) \
     ReadPixelArray((rp), (ULONG)(x), (ULONG)(y), (buf), 0, 0, (ULONG)(mod), \
@@ -2966,31 +2967,66 @@ static void spike_divider_hover(void)
  * handle's paint and a click there reaches that window. With
  * WindowToFront the invisible strip sat on top of every window, lit
  * up over one that covered the pair and took its clicks, resizing the
- * windows below (first real MorphOS machine, 2026-09-23). The two
- * windows were validated by the library a moment ago.
+ * windows below (first real MorphOS machine, 2026-09-23).
+ *
+ * And only when the handle is not there already. MoveWindowInFrontOf()
+ * is carried out later by Intuition, and it names a window that is not
+ * ours: one closed in the meantime leaves Intuition working on freed
+ * memory. That froze AmigaOS 4 whenever a window of the pair was closed
+ * with its close gadget, which sits beside the seam (2026-11-09, a user
+ * and the VM): the release of that click re-synced the handle and asked
+ * for its depth again just as the window was going. The two windows
+ * are looked up on their screen under LockIBase, as everywhere else,
+ * so a window that has gone is never named at all.
  */
+static int spike_window_on(struct Screen *scr, struct Window *win)
+{
+    struct Window *w;
+
+    for (w = scr->FirstWindow; w != NULL; w = w->NextWindow) {
+        if (w == win) {
+            return w->WLayer != NULL;
+        }
+    }
+    return 0;
+}
+
 static void spike_divider_depth(const struct ESnapDivider *d)
 {
-    struct Window *front = d->windowA;
+    struct Window *a = d->windowA, *b = d->windowB, *front = NULL;
+    struct Screen *scr;
     struct Layer *l;
+    ULONG ilock;
+    int raise = 0;
 
     if (g_divider == NULL) {
         return;
     }
-    if (front == NULL || front->WLayer == NULL) {
-        front = d->windowB;
-    } else if (d->windowB != NULL && d->windowB->WLayer != NULL) {
-        for (l = front->WLayer->front; l != NULL; l = l->front) {
-            if (l == d->windowB->WLayer) {
-                front = d->windowB;     /* B lies in front of A */
+    scr = g_divider->WScreen;
+    ilock = LockIBase(0);
+    if (a != NULL && !spike_window_on(scr, a)) {
+        a = NULL;
+    }
+    if (b != NULL && !spike_window_on(scr, b)) {
+        b = NULL;
+    }
+    front = a != NULL ? a : b;
+    if (a != NULL && b != NULL) {
+        for (l = a->WLayer->front; l != NULL; l = l->front) {
+            if (l == b->WLayer) {
+                front = b;              /* B lies in front of A */
                 break;
             }
         }
     }
     if (front != NULL) {
+        /* already directly in front of it: nothing to ask for */
+        raise = g_divider->WLayer == NULL ||
+                g_divider->WLayer->back != front->WLayer;
+    }
+    UnlockIBase(ilock);
+    if (raise) {
         MoveWindowInFrontOf(g_divider, front);
-    } else {
-        WindowToFront(g_divider);
     }
 }
 
@@ -3710,6 +3746,80 @@ static ULONG g_seen_grabs;
  */
 static int g_drag_active;
 
+#ifdef ES_PREVIEW_PIXELS
+/*
+ * Would the frame be carried off by the window being dragged? It is
+ * painted into the screen's own pixels, and with "Drag window with
+ * contents" (IControl's opaque move) and no compositing, AmigaOS 4
+ * moves a window by copying its pixels on the screen, ours included:
+ * the strips that lay on the window travel with it and stay there as
+ * blue lines once the frame is gone (a Sam460 with a Radeon RX, and the
+ * VM with compositing turned off, 2026-11-09). A frame of real windows
+ * is no way out: windows opened during a drag only appear on release,
+ * with or without compositing. So in that one combination the frame is
+ * left out for the drag, and the snap works as ever. A composited
+ * screen keeps each window's pixels apart, and a drag by outline moves
+ * nothing until the release; both keep the frame.
+ */
+static int g_pf_carried;
+
+static int spike_pf_opaque_move(void)
+{
+    static UBYTE buf[16384];
+    static const char *const files[2] = {
+        "ENV:Sys/gui.prefs", "ENV:Sys/icontrol.prefs"
+    };
+    int f;
+
+    for (f = 0; f < 2; f++) {
+        BPTR fh = Open((STRPTR)files[f], MODE_OLDFILE);
+        LONG len, pos = 12;
+
+        if (fh == 0) {
+            continue;
+        }
+        len = Read(fh, buf, (LONG)sizeof(buf));
+        Close(fh);
+        while (pos + 8 <= len) {
+            ULONG size = ((ULONG)buf[pos + 4] << 24) |
+                         ((ULONG)buf[pos + 5] << 16) |
+                         ((ULONG)buf[pos + 6] << 8) | buf[pos + 7];
+
+            /* struct IControlPrefs: ic_Flags after four LONGs and two
+             * WORDs */
+            if (memcmp(buf + pos, "ICTL", 4) == 0 && size >= 24 &&
+                pos + 8 + 24 <= len) {
+                const UBYTE *p = buf + pos + 8 + 20;
+                ULONG flags = ((ULONG)p[0] << 24) | ((ULONG)p[1] << 16) |
+                              ((ULONG)p[2] << 8) | p[3];
+
+                return (flags & (1UL << ICB_OPAQUEMOVE)) != 0;
+            }
+            pos += 8 + (LONG)size + (LONG)(size & 1);
+        }
+    }
+    return 0;
+}
+
+static int spike_pf_carried_now(void)
+{
+    struct Screen *scr = LockPubScreen(NULL);
+    ULONG comp = 0;
+
+    if (scr == NULL) {
+        return 0;
+    }
+    /* V53: before it, no compositing to keep the pixels apart */
+    if (GetScreenAttr(scr, SA_Compositing, &comp, sizeof(comp)) == 0) {
+        comp = 0;
+    }
+    UnlockPubScreen(NULL, scr);
+    return comp == 0 && spike_pf_opaque_move();
+}
+#else
+#define g_pf_carried 0
+#endif
+
 static void spike_apply_report(const struct ESnapReport *r)
 {
     if (r->previewHide) {
@@ -3717,11 +3827,20 @@ static void spike_apply_report(const struct ESnapReport *r)
     }
     if (r->dragStarted) {
         spike_log("edgesnap: drag detected\n");
+#ifdef ES_PREVIEW_PIXELS
+        g_pf_carried = g_cfg.preview && spike_pf_carried_now();
+        if (g_pf_carried) {
+            spike_log("edgesnap: no frame for this drag: windows move "
+                      "with their contents and the screen is not "
+                      "composited\n");
+        }
+#endif
     }
     if (r->zoneChanged) {
         spike_log("edgesnap: zone -> %s\n", es_zone_name((int)r->zone));
     }
-    if (r->previewShow && g_cfg.preview && r->previewScreen != NULL) {
+    if (r->previewShow && g_cfg.preview && !g_pf_carried &&
+        r->previewScreen != NULL) {
         ESRect rect;
 
         rect.x = (int)r->previewRect.x;
@@ -3921,9 +4040,13 @@ static void spike_engine_step(void)
      * Every released drag can have broken the pair - a window dragged
      * away, resized, or closed. The library checks the pair against
      * the live windows, so asking again here is what makes the handle
-     * disappear when the seam stops existing.
+     * disappear when the seam stops existing. A window closed by this
+     * very release (its close gadget sits beside the seam) is still
+     * going: wait for it as the snap path waits for the box, so it is
+     * gone by the time we ask, and the handle is not stacked against it.
      */
     if (new_release && !r.snapped) {
+        Delay(10L);
         spike_divider_sync();
         spike_log_flush();
     }
