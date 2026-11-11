@@ -172,6 +172,21 @@ EdgeSnap's, and AmigaOS takes it up when it resets the Workbench
 screen or starts again.
 """),
 
+    # the frame AmigaOS 4 leaves out without compositing: not here, where
+    # a window that moves whole gets a frame of four small windows
+    ("""@{b}No frame on AmigaOS 4 without compositing@{ub}
+On AmigaOS 4, when the GUI preferences have "Drag window with
+contents" ticked (Controls) and compositing is off (Effects), a
+moving window carries along whatever is painted on the screen under
+it, the frame included, and leaves it on the window as lines. In that
+one combination EdgeSnap shows no frame: the window still snaps where
+you let it go. Turn compositing on, or drag windows as an outline, and
+the frame comes back. While it is so, the preferences window says it
+under "Show the preview frame".
+
+""",
+     ""),
+
     # the seam
     ("""preview frame. Press on it and drag, and both windows are resized
 together; on AmigaOS 4 and MorphOS the pointer becomes a double arrow
@@ -208,12 +223,12 @@ its port, and works without it. From a Shell a script runs with
 """),
 
     # for programmers
-    ("""EdgeSnap is 0.51: a beta, complete in what it does and tested on real
+    ("""EdgeSnap is 0.53: a beta, complete in what it does and tested on real
 MorphOS hardware, on a Raspberry Pi 400 with AROS, and on AmigaOS 4,
 MorphOS, AROS x86_64 and AROS i386 under emulation.
 @{b}edgesnap.library@{ub} says %%LIBVER%%, and that is not a mistake: a
 """,
-     """EdgeSnap is 0.51: a beta, complete in what it does and tested on
+     """EdgeSnap is 0.53: a beta, complete in what it does and tested on
 AmigaOS 3.2, on real hardware and under emulation, and on 3.1 under
 emulation.
 @{b}edgesnap.library@{ub} says %%LIBVER%%, and that is not a mistake: a

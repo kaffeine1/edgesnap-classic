@@ -837,17 +837,20 @@ static int esb_glide_step(struct Window *win, const ESRect *was,
 
 #ifdef ESB_CLASSIC_ONSCREEN
 /*
- * On AmigaOS 3.2 (intuition 47, layers 46) ChangeWindowBox() of a
- * window that stands partly off the screen loses what was off it: a
- * smart refresh window gets that part back blank or scrambled, and its
- * application is not asked to draw it again. MoveWindow() keeps it.
- * Where windows may move off-screen, a drag to an edge leaves the
- * window partly off the screen at the release, so every snap there met
- * this: DOpus listers on AmiKit came back with half a toolbar or a
- * rectangle of noise (PiStorm, 2026-11-06, the same with ChangeWindowBox
- * alone and no EdgeSnap running). So such a window is first moved, at
- * its own size, to where it fits, as near its new place as it can be,
- * and resized from there. `at` is where it stands, and is updated.
+ * On a PiStorm with AmiKit (AmigaOS 3.2.3, intuition 47, layers 46)
+ * ChangeWindowBox() of a window that stood partly off the screen lost
+ * what was off it: a smart refresh window got that part back blank or
+ * scrambled, and its application was not asked to draw it again.
+ * MoveWindow() kept it. Where windows may move off-screen, a drag to an
+ * edge leaves the window partly off the screen at the release, so every
+ * snap there met this: DOpus listers came back with half a toolbar or a
+ * rectangle of noise (2026-11-06, the same with ChangeWindowBox alone
+ * and no EdgeSnap running). The same calls were clean on a Vampire with
+ * the same intuition and layers, and on that PiStorm just after it was
+ * started (2026-11-07 and 11), so the cause is not the system alone and
+ * is not known. So such a window is first moved, at its own size, to
+ * where it fits, as near its new place as it can be, and resized from
+ * there. `at` is where it stands, and is updated.
  */
 static void esb_bring_on_screen(struct Window *win, const ESRect *to,
                                 ESRect *at)

@@ -192,6 +192,11 @@
  *       off whatever it says. The outline of a classic drag is judged
  *       as the other systems now judge any window whose box has not
  *       moved.
+ *   2.29 - the classic systems only: a window that stands partly off
+ *       the screen is moved back onto it at its own size before it is
+ *       resized or glides, because a DOpus lister on AmiKit came back
+ *       from there with noise where it had been off the screen. No
+ *       vector.
  */
 #define ES_API_VERSION       2
 /* A client that uses a vector appended after 2.2 must check that the

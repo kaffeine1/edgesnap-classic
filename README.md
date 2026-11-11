@@ -76,8 +76,8 @@ turns MCP's moving off while EdgeSnap runs.
 
 ## Status
 
-The current release is **0.51** (2026-11-02), with `edgesnap.library`
-2.28. It is the first public release of this lane and a beta.
+The current release is **0.53** (2026-11-11), with `edgesnap.library`
+2.29. It is a beta.
 
 Tested on AmigaOS 3.2.3 under emulation, with AGA and with a graphics
 card, and on 3.1 under emulation. Earlier versions ran on real
