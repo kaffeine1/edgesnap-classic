@@ -133,8 +133,12 @@ struct ESGroup {
     int keys;                 /* checkboxes beside keys get a whole row */
     int label_w;              /* widest label among the labelled rows   */
     int w, h;                 /* the frame                              */
-    int col;
+    int col;                  /* 0, 1, or ES_COL_BOTH across the two    */
+    int split;                /* rows in the left half, 0: one column   */
+    int label_w2, x2;         /* the right half: labels, and its offset */
 };
+
+#define ES_COL_BOTH 2
 
 struct ESPrefs {
     ESConfig cfg;
@@ -261,10 +265,50 @@ static int es_zone_grid_w(struct ESPrefs *p)
 static const char es_off_group[] = "AmigaOS";
 static const char es_off_label[] = "Windows can move off-screen:";
 
+/* The widest row among the table's rows from..to of a group, and the
+ * label column they share. A long checkbox label must not widen every
+ * key's label column: it uses its own row, with its label on the
+ * right. */
+static int es_rows_w(struct ESPrefs *p, const struct ESGroup *g,
+                     int from, int to, int *label_w)
+{
+    int widest = 0, k;
+
+    for (k = from; k <= to; k++) {
+        const ESSetting *s = &p->table[k];
+
+        if (s->kind != ES_SET_ZONES &&
+            !(g->keys && s->kind == ES_SET_BOOL)) {
+            int lw = es_text_w(p, s->label) + es_text_w(p, ":");
+
+            if (lw > *label_w) {
+                *label_w = lw;
+            }
+        }
+    }
+    for (k = from; k <= to; k++) {
+        const ESSetting *s = &p->table[k];
+        int rw;
+
+        if (s->kind == ES_SET_ZONES) {
+            rw = es_zone_grid_w(p);
+        } else if (g->keys && s->kind == ES_SET_BOOL) {
+            rw = p->box_w + ES_LGAP + es_text_w(p, s->label);
+        } else {
+            rw = *label_w + ES_LGAP + es_gadget_w(p, s);
+        }
+        if (rw > widest) {
+            widest = rw;
+        }
+    }
+    return widest;
+}
+
 static int es_measure(struct ESPrefs *p, int page, struct ESGroup *g, int max)
 {
-    int n = 0, i, k;
+    int n = 0, i;
 
+    memset(g, 0, sizeof(*g) * (size_t)max);
     for (i = p->page_first[page]; i < p->page_first[page + 1]; i++) {
         const ESSetting *s = &p->table[i];
 
@@ -302,39 +346,13 @@ static int es_measure(struct ESPrefs *p, int page, struct ESGroup *g, int max)
         n++;
     }
     for (i = 0; i < n; i++) {
-        int widest = 0;
+        int widest;
 
-        /* A long checkbox label must not widen every key's label
-         * column. It uses its own row, with its label on the right. */
-        for (k = g[i].first; g[i].first >= 0 && k <= g[i].last; k++) {
-            const ESSetting *s = &p->table[k];
-
-            if (s->kind != ES_SET_ZONES &&
-                !(g[i].keys && s->kind == ES_SET_BOOL)) {
-                int lw = es_text_w(p, s->label) + es_text_w(p, ":");
-
-                if (lw > g[i].label_w) {
-                    g[i].label_w = lw;
-                }
-            }
-        }
         if (g[i].first < 0) {
             widest = g[i].label_w + ES_LGAP + p->box_w;
-        }
-        for (k = g[i].first; g[i].first >= 0 && k <= g[i].last; k++) {
-            const ESSetting *s = &p->table[k];
-            int rw;
-
-            if (s->kind == ES_SET_ZONES) {
-                rw = es_zone_grid_w(p);
-            } else if (g[i].keys && s->kind == ES_SET_BOOL) {
-                rw = p->box_w + ES_LGAP + es_text_w(p, s->label);
-            } else {
-                rw = g[i].label_w + ES_LGAP + es_gadget_w(p, s);
-            }
-            if (rw > widest) {
-                widest = rw;
-            }
+        } else {
+            widest = es_rows_w(p, &g[i], g[i].first, g[i].last,
+                               &g[i].label_w);
         }
         g[i].w = ES_PAD * 2 + widest;
         g[i].h = ES_TITLE_H + 2 + g[i].rows * p->rowh + ES_PAD;
@@ -368,24 +386,83 @@ static void es_columns(struct ESGroup *g, int n)
     }
 }
 
-static int es_layout(struct ESPrefs *p, int page, struct ESGroup *g,
-                      int *col_w, int *height)
+/* The room a decided layout takes: each column as wide as its widest
+ * frame, and a group across both, which comes first, as wide as the
+ * two together. */
+static void es_extent(const struct ESGroup *g, int n, int *col_w,
+                      int *height)
 {
-    int n = es_measure(p, page, g, ES_MAX_GROUPS);
     int col_h[2] = { ES_PAD, ES_PAD };
     int i;
 
-    es_columns(g, n);
     col_w[0] = col_w[1] = 0;
     for (i = 0; i < n; i++) {
         int c = g[i].col;
 
+        if (c == ES_COL_BOTH) {
+            col_h[0] += g[i].h + ES_GAP;
+            col_h[1] = col_h[0];
+            continue;
+        }
         if (g[i].w > col_w[c]) {
             col_w[c] = g[i].w;
         }
         col_h[c] += g[i].h + ES_GAP;
     }
+    for (i = 0; i < n; i++) {
+        if (g[i].col == ES_COL_BOTH &&
+            g[i].w > col_w[0] + ES_PAD + col_w[1]) {
+            col_w[1] = g[i].w - ES_PAD - col_w[0];
+        }
+    }
     *height = col_h[0] > col_h[1] ? col_h[0] : col_h[1];
+}
+
+/* A page led by one tall group of keys, as Hotkeys is, comes out
+ * shorter with that group across the window, its rows in two halves,
+ * and the other groups in two columns under it: at 640x200 (NTSC) the
+ * window then fits. Taken only when the page gets shorter and no
+ * wider. */
+static void es_across(struct ESPrefs *p, struct ESGroup *g, int n,
+                      int *col_w, int *height)
+{
+    struct ESGroup t[ES_MAX_GROUPS];
+    int tw[2], th, half, wa, wb;
+
+    if (n < 2 || !g[0].keys || g[0].first < 0 || g[0].rows < 4 ||
+        g[0].rows != g[0].last - g[0].first + 1) {
+        return;
+    }
+    memcpy(t, g, sizeof(*g) * (size_t)n);
+    half = (t[0].rows + 1) / 2;
+    t[0].label_w = t[0].label_w2 = 0;
+    wa = es_rows_w(p, &t[0], t[0].first, t[0].first + half - 1,
+                   &t[0].label_w);
+    wb = es_rows_w(p, &t[0], t[0].first + half, t[0].last,
+                   &t[0].label_w2);
+    t[0].split = half;
+    t[0].x2 = wa + ES_LGAP * 2;
+    t[0].w = ES_PAD * 2 + t[0].x2 + wb;
+    t[0].h = ES_TITLE_H + 2 + half * p->rowh + ES_PAD;
+    t[0].col = ES_COL_BOTH;
+    es_columns(t + 1, n - 1);
+    es_extent(t, n, tw, &th);
+    if (th < *height && tw[0] + tw[1] <= col_w[0] + col_w[1]) {
+        memcpy(g, t, sizeof(*g) * (size_t)n);
+        col_w[0] = tw[0];
+        col_w[1] = tw[1];
+        *height = th;
+    }
+}
+
+static int es_layout(struct ESPrefs *p, int page, struct ESGroup *g,
+                      int *col_w, int *height)
+{
+    int n = es_measure(p, page, g, ES_MAX_GROUPS);
+
+    es_columns(g, n);
+    es_extent(g, n, col_w, height);
+    es_across(p, g, n, col_w, height);
     return n;
 }
 
@@ -593,15 +670,26 @@ static int es_build(struct ESPrefs *p)
     p->frames = 0;
     for (i = 0; i < n && gad != NULL; i++) {
         int c = g[i].col;
-        int x = col_x[c], y = col_y[c];
-        int gy = y + ES_TITLE_H + 2;
+        int x, y, fw, top, gy, rx, lw;
 
+        if (c == ES_COL_BOTH) {
+            x = ES_PAD;
+            y = col_y[0] > col_y[1] ? col_y[0] : col_y[1];
+            fw = col_w[0] + ES_PAD + col_w[1];
+        } else {
+            x = col_x[c];
+            y = col_y[c];
+            fw = col_w[c];
+        }
+        top = gy = y + ES_TITLE_H + 2;
+        rx = x + ES_PAD;
+        lw = g[i].label_w;
         if (p->frames < ES_MAX_GROUPS) {
             struct ESFrame *f = &p->frame[p->frames++];
 
             f->x = x;
             f->y = y;
-            f->w = col_w[c];
+            f->w = fw;
             f->h = g[i].h;
             f->title = g[i].name;
         }
@@ -615,17 +703,25 @@ static int es_build(struct ESPrefs *p)
              g[i].first >= 0 && k <= g[i].last && gad != NULL; k++) {
             const ESSetting *s = &p->table[k];
 
+            if (g[i].split > 0 && k == g[i].first + g[i].split) {
+                gy = top;                     /* the right half */
+                rx += g[i].x2;
+                lw = g[i].label_w2;
+            }
             if (s->kind == ES_SET_ZONES) {
-                gad = es_make_zones(p, gad, k, x + ES_PAD, gy);
+                gad = es_make_zones(p, gad, k, rx, gy);
                 gy += p->rowh * ES_ZONE_ROWS;
             } else {
-                gad = es_make(p, gad, s, k, x + ES_PAD, gy,
-                               g[i].label_w, g[i].keys);
+                gad = es_make(p, gad, s, k, rx, gy, lw, g[i].keys);
                 p->gadget[k] = gad;
                 gy += p->rowh;
             }
         }
-        col_y[c] = y + g[i].h + ES_GAP;
+        if (c == ES_COL_BOTH) {
+            col_y[0] = col_y[1] = y + g[i].h + ES_GAP;
+        } else {
+            col_y[c] = y + g[i].h + ES_GAP;
+        }
     }
     /* The page cycle on the left, the three buttons on the right. */
     if (gad != NULL) {
