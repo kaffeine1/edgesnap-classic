@@ -260,7 +260,6 @@ static int es_zone_grid_w(struct ESPrefs *p)
 
 static const char es_off_group[] = "AmigaOS";
 static const char es_off_label[] = "Windows can move off-screen:";
-static const char es_off_after[] = "Sensitivity";   /* its place */
 
 static int es_measure(struct ESPrefs *p, int page, struct ESGroup *g, int max)
 {
@@ -291,25 +290,15 @@ static int es_measure(struct ESPrefs *p, int page, struct ESGroup *g, int max)
             }
         }
     }
-    /* AmigaOS's row: a group of its own, after the one it belongs
-     * next to, or last */
-    if (page == 0 && p->off_avail && n < max) {
-        int at = n;
-
-        for (i = 0; i < n; i++) {
-            if (es_same_group(g[i].name, es_off_after)) {
-                at = i + 1;
-                break;
-            }
-        }
-        for (i = n; i > at; i--) {
-            g[i] = g[i - 1];
-        }
-        g[at].name = es_off_group;
-        g[at].first = g[at].last = -1;
-        g[at].rows = 1;
-        g[at].keys = 0;
-        g[at].label_w = es_text_w(p, es_off_label);
+    /* AmigaOS's row: a group of its own, last on the Screen page,
+     * which has docks and margins since 0.54 so the window is shorter */
+    if (es_same_group(p->page_name[page], "Screen") && p->off_avail &&
+        n < max) {
+        g[n].name = es_off_group;
+        g[n].first = g[n].last = -1;
+        g[n].rows = 1;
+        g[n].keys = 0;
+        g[n].label_w = es_text_w(p, es_off_label);
         n++;
     }
     for (i = 0; i < n; i++) {

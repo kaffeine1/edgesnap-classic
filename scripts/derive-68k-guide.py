@@ -102,10 +102,10 @@ AmigaOS 4 let a window go past the edge as delivered, unless someone
 turned it off.
 
 To change it either way, use the box @{b}Windows can move off-screen@{ub}
-in EdgeSnap's preferences, in the section named after the system, or
-the system's own editor: IControl, or GUI on AmigaOS 4. On MorphOS,
-IControl's key, Control as delivered, turns the setting round while it
-is held.
+on the Screen page of EdgeSnap's preferences, in the section named
+after the system, or the system's own editor: IControl, or GUI on
+AmigaOS 4. On MorphOS, IControl's key, Control as delivered, turns the
+setting round while it is held.
 """,
      """@{b}Windows that may not leave the screen@{ub}
 AmigaOS 3.2 as installed keeps windows on the screen: one dragged
@@ -119,8 +119,8 @@ goes on to the edge with them.
 takes the setting up when it starts. The installer says so as well.
 It is the box @{b}Can Move Off-screen@{ub} in
 @{b}SYS:Prefs/IControl@{ub}, and EdgeSnap's own preferences have it
-too, as @{b}Windows can move off-screen@{ub}: that is where to turn it
-back.
+too, on the Screen page, as @{b}Windows can move off-screen@{ub}: that
+is where to turn it back.
 
 On AmiKit, and wherever MCP is installed, the installer leaves the
 setting off. A DOpus lister moved past the edge there comes back with
@@ -160,16 +160,17 @@ Raise it if another commodity keeps the mouse button for itself.
 """),
 
     # the preferences window: on AmigaOS the setting waits
-    ("""A refused hotkey leaves the window open for correction. It also has the
-system's own "Windows can move off-screen", in a section named after
-the system (see above): it is kept in the system's preferences, not in
-EdgeSnap's, and the system follows it at once.
+    ("""A refused hotkey leaves the window open for correction. The
+Screen page also has the system's own "Windows can move off-screen",
+in a section named after the system (see above): it is kept in the
+system's preferences, not in EdgeSnap's, and the system follows it at
+once.
 """,
-     """A refused hotkey leaves the window open for correction. It also has the
-system's own "Windows can move off-screen", in the section named
-AmigaOS (see above): it is kept in the system's preferences, not in
-EdgeSnap's, and AmigaOS takes it up when it resets the Workbench
-screen or starts again.
+     """A refused hotkey leaves the window open for correction. The
+Screen page also has the system's own "Windows can move off-screen",
+in the section named AmigaOS (see above): it is kept in the system's
+preferences, not in EdgeSnap's, and AmigaOS takes it up when it resets
+the Workbench screen or starts again.
 """),
 
     # the frame AmigaOS 4 leaves out without compositing: not here, where
