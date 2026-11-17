@@ -123,7 +123,8 @@ version and what you did.
 Since 0.53: the preferences have a Screen page, with docks, margins
 and AmigaOS's "Can Move Off-screen" switch, and the snap hotkeys sit
 across their page. The window is 180 lines tall instead of 250 and
-fits a 640x200 NTSC screen with topaz 8. edgesnap.library stays 2.29.
+fits a 640x200 NTSC screen with topaz 8. Under AfA OS the titles of
+the groups were missing; they show now. edgesnap.library stays 2.29.
 
 TO INSTALL: double-click the Install icon. It recognises the system,
 proposes the matching build, and puts everything where it belongs: the

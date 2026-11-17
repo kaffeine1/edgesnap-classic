@@ -768,15 +768,26 @@ static void es_draw_frames(struct ESPrefs *p)
         struct ESFrame *f = &p->frame[i];
         int x = p->bl + f->x;
         int y = p->bt + f->y;
+        struct IntuiText it;
 
         DrawBevelBox(rp, x, y, f->w, f->h,
                      GT_VisualInfo, (ESTagData)p->vi,
                      GTBB_Recessed, TRUE,
                      TAG_DONE);
-        SetAPen(rp, p->dri->dri_Pens[HIGHLIGHTTEXTPEN]);
-        SetDrMd(rp, JAM1);
-        Move(rp, x + ES_PAD + 2, y + 2 + rp->TxBaseline);
-        Text(rp, (CONST_STRPTR)f->title, (ULONG)strlen(f->title));
+        /* Through Intuition, as GadTools draws its labels, and not with
+         * Text(): its count is a UWORD, and gcc may leave the upper half
+         * of d0 set. graphics.library reads only the lower half, but the
+         * Text() of AfA OS (AmiKit on a PiStorm) read all of it and drew
+         * no title at all. */
+        it.FrontPen = (UBYTE)p->dri->dri_Pens[HIGHLIGHTTEXTPEN];
+        it.BackPen = 0;
+        it.DrawMode = JAM1;
+        it.LeftEdge = 0;
+        it.TopEdge = 0;
+        it.ITextFont = NULL;          /* the window's font, as before */
+        it.IText = (UBYTE *)f->title;
+        it.NextText = NULL;
+        PrintIText(rp, &it, x + ES_PAD + 2, y + 2);
     }
 }
 
