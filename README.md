@@ -14,9 +14,14 @@ It runs on AmigaOS 3.1 and later (it starts on 2.04), on any 68000 or
 later, with or without a graphics card. Written in C89, with no system
 patches.
 
-![The preferences window on AmigaOS 3.2](docs/screenshots/prefs-amigaos3.png)
+![A Shell on the left half of the screen and the manual on the right half](docs/screenshots/amikit-side-by-side.png)
 
-*The preferences window on AmigaOS 3.2.3 (GadTools, 640x256).*
+*A Shell and the manual side by side, on a PiStorm with AmiKit (AmigaOS
+3.2.3, 1920x1080).*
+
+![The preferences window: zones, sensitivity and look](docs/screenshots/prefs-amikit.png)
+
+*The preferences window on the same machine (GadTools).*
 
 This is the 68k lane of [EdgeSnap](https://github.com/kaffeine1/edgesnap),
 which runs on AmigaOS 4, MorphOS and AROS. The engine, the library and
