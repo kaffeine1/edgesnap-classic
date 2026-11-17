@@ -224,12 +224,12 @@ its port, and works without it. From a Shell a script runs with
 """),
 
     # for programmers
-    ("""EdgeSnap is 0.53: a beta, complete in what it does and tested on real
+    ("""EdgeSnap is 0.54: a beta, complete in what it does and tested on real
 MorphOS hardware, on a Raspberry Pi 400 with AROS, and on AmigaOS 4,
 MorphOS, AROS x86_64 and AROS i386 under emulation.
 @{b}edgesnap.library@{ub} says %%LIBVER%%, and that is not a mistake: a
 """,
-     """EdgeSnap is 0.53: a beta, complete in what it does and tested on
+     """EdgeSnap is 0.54: a beta, complete in what it does and tested on
 AmigaOS 3.2, on real hardware and under emulation, and on 3.1 under
 emulation.
 @{b}edgesnap.library@{ub} says %%LIBVER%%, and that is not a mistake: a

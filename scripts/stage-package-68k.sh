@@ -86,7 +86,7 @@ Short:        Tile windows by dragging them to an edge
 Author:       michele.dipace@kaffeine.net (Michele Dipace)
 Uploader:     michele.dipace@kaffeine.net (Michele Dipace)
 Type:         util/cdity
-Version:      0.53 (beta)
+Version:      0.54 (beta)
 Architecture: m68k-amigaos >= 2.0.4
 
 EdgeSnap gives AmigaOS 3.1 and later the window snapping of Windows and
@@ -120,16 +120,10 @@ fine, and I would like to hear how it does. It is a beta: please write
 to me about anything that looks wrong, with the machine, the system
 version and what you did.
 
-Since 0.51: closing one of two windows side by side with its close
-gadget, which sits beside the seam, could have EdgeSnap ask Intuition
-to put the seam's handle in front of a window that was just going. It
-no longer does. The seam lights up only where a press takes hold of
-it: it used to light up three pixels to each side as well, where the
-press went to the window underneath. A window that stands partly off
-the screen is moved back onto it before it is resized
-(edgesnap.library 2.29). On AmiKit, EdgeSnap now leaves MCP's solid
-window moving on and snaps the windows MCP moves; it used to turn it
-off while it ran, which KEEPMCP=NO still does.
+Since 0.53: the preferences have a Screen page, with docks, margins
+and AmigaOS's "Can Move Off-screen" switch, and the snap hotkeys sit
+across their page. The window is 180 lines tall instead of 250 and
+fits a 640x200 NTSC screen with topaz 8. edgesnap.library stays 2.29.
 
 TO INSTALL: double-click the Install icon. It recognises the system,
 proposes the matching build, and puts everything where it belongs: the
